@@ -1,7 +1,20 @@
 package main
 
-type Direction int
-type DirectionType int
+import "unicode/utf8"
+
+var (
+	WallLength             = 3
+	IdleBoxerWidth         = 2
+	IdleBoxerBehindLength  = 0
+	IdleBoxerForwardLength = utf8.RuneCountInString(BodyChars[Idle][Arm][Left][Up])
+	AllBodyParts           = map[BodyPart][]VerDirection{Head: {Up}, Shoulder: {Up, Down}, Arm: {Up, Down}}
+)
+
+type Bounds bool
+type BodyPart int
+type IsOpponent bool
+type HorDirection bool
+type VerDirection bool
 type SituationType int
 
 type Position struct {
@@ -10,247 +23,150 @@ type Position struct {
 }
 
 type Boxer struct {
+	Area      map[Bounds]*Position
+	Name      string
 	Color     string
-	Pose      Position
+	Health    int
+	LastHit   int64 //timestamp
+	Position  Position
+	Direction HorDirection
 	Situation SituationType
-	Direction DirectionType
 }
 
 type Cage struct {
 	Color string
-	Limit Position
+	Area  map[Bounds]*Position
+}
+
+type GameInfo struct {
+	Cage   Cage
+	Boxers map[IsOpponent]*Boxer
 }
 
 const (
-	Idle SituationType = 1
-
-	HeadHitInit SituationType = 2
-	HeadHit     SituationType = 3
-
-	ShoulderHitInit SituationType = 4
-	ShoulderHit     SituationType = 5
-
-	UpPunchInit SituationType = 6
-	UpPunch     SituationType = 7
-
-	DownPunchInit SituationType = 8
-	DownPunch     SituationType = 9
+	MaxHealthPoint  int           = 100
+	HeadHitHp       int           = 3
+	ShoulderHitHp   int           = 1
+	Min             Bounds        = false
+	Max             Bounds        = true
+	Main            IsOpponent    = false
+	Opponent        IsOpponent    = true
+	Up              VerDirection  = false
+	Down            VerDirection  = true
+	Left            HorDirection  = false
+	Right           HorDirection  = true
+	Head            BodyPart      = 1
+	Shoulder        BodyPart      = 2
+	Arm             BodyPart      = 3
+	Idle            SituationType = 1
+	Punch           SituationType = 2
+	PunchInit       SituationType = 3
+	HeadHit         SituationType = 4
+	HeadInitHit     SituationType = 5
+	ShoulderHit     SituationType = 6
+	ShoulderInitHit SituationType = 7
 )
 
-const (
-	Up    Direction     = 1
-	Down  Direction     = 2
-	Left  DirectionType = 1
-	Right DirectionType = 2
-)
-
-type BodySituation struct {
-	head     map[DirectionType]string
-	arm      map[DirectionType]map[Direction]string
-	shoulder map[DirectionType]map[Direction]string
-
-	headPose     map[DirectionType]Position
-	armPose      map[DirectionType]map[Direction]Position
-	shoulderPose map[DirectionType]map[Direction]Position
-}
-
-var Situations = map[SituationType]*BodySituation{
+var BodyChars = map[SituationType]map[BodyPart]map[HorDirection]map[VerDirection]string{
 	Idle: {
-		head: map[DirectionType]string{
-			Right: "(:", Left: ":)"},
-		headPose: map[DirectionType]Position{
-			Right: {X: 0, Y: 0},
-			Left:  {X: 0, Y: 0},
+		Head: {
+			Left:  {Up: "(:/)"},
+			Right: {Up: "(/:)"},
 		},
-		arm: map[DirectionType]map[Direction]string{
+		Arm: {
+			Left:  {Up: "╭╭══O", Down: "╰╰══O"},
 			Right: {Up: "O══╮╮", Down: "O══╯╯"},
-			Left:  {Up: "╭╭══O", Down: "╰╰══O"}},
-		shoulder: map[DirectionType]map[Direction]string{
-			Right: {Up: "()", Down: "()"},
-			Left:  {Up: "()", Down: "()"}},
-		armPose: map[DirectionType]map[Direction]Position{
-			Right: {Up: {X: -4, Y: -2}, Down: {X: -4, Y: 2}},
-			Left:  {Up: {X: 1, Y: -2}, Down: {X: 1, Y: 2}},
 		},
-		shoulderPose: map[DirectionType]map[Direction]Position{
-			Right: {Up: {X: 0, Y: 1}, Down: {X: 0, Y: -1}},
-			Left:  {Up: {X: 0, Y: -1}, Down: {X: 0, Y: 1}},
+		Shoulder: {
+			Left:  {Up: "\\\\", Down: "//"},
+			Right: {Up: "//", Down: "\\\\"},
 		},
 	},
-	HeadHitInit: {
-		head: map[DirectionType]string{
-			Right: "): *", Left: "* :("},
-		headPose: map[DirectionType]Position{
-			Right: {X: 0, Y: 0},
-			Left:  {X: -2, Y: 0},
+	Punch: {
+		Shoulder: {
+			Left:  {Up: "\\\\══O", Down: "//══O"},
+			Right: {Up: "O══//", Down: "O══\\\\"},
 		},
-		arm: map[DirectionType]map[Direction]string{
-			Right: {Up: "O══╮╮", Down: "O══╯╯"},
-			Left:  {Up: "╭╭══O", Down: "╰╰══O"}},
-		shoulder: map[DirectionType]map[Direction]string{
-			Right: {Up: "()", Down: "()"},
-			Left:  {Up: "()", Down: "()"}},
-		armPose: map[DirectionType]map[Direction]Position{
-			Right: {Up: {X: -4, Y: -2}, Down: {X: -4, Y: 2}},
-			Left:  {Up: {X: 1, Y: -2}, Down: {X: 1, Y: 2}},
-		},
-		shoulderPose: map[DirectionType]map[Direction]Position{
-			Right: {Up: {X: 0, Y: -1}, Down: {X: 0, Y: 1}},
-			Left:  {Up: {X: 0, Y: -1}, Down: {X: 0, Y: 1}},
+	},
+	PunchInit: {
+		Shoulder: {
+			Left:  {Up: "\\\\═O", Down: "//═O"},
+			Right: {Up: "O═//", Down: "O═\\\\"},
 		},
 	},
 	HeadHit: {
-		head: map[DirectionType]string{
-			Right: "): * *", Left: "* * :("},
-		headPose: map[DirectionType]Position{
-			Right: {X: 0, Y: 0},
-			Left:  {X: -4, Y: 0},
+		Head: {
+			Left:  {Up: "**"},
+			Right: {Up: "**"},
 		},
-		arm: map[DirectionType]map[Direction]string{
-			Right: {Up: "O══╮╮", Down: "O══╯╯"},
-			Left:  {Up: "╭╭══O", Down: "╰╰══O"}},
-		shoulder: map[DirectionType]map[Direction]string{
-			Right: {Up: "()  *", Down: "()  *"},
-			Left:  {Up: "*  ()", Down: "*  ()"}},
-		armPose: map[DirectionType]map[Direction]Position{
-			Right: {Up: {X: -4, Y: -2}, Down: {X: -4, Y: 2}},
-			Left:  {Up: {X: 1, Y: -2}, Down: {X: 1, Y: 2}},
+		Arm: {
+			Left:  {Up: "* ", Down: "* "},
+			Right: {Up: " *", Down: " *"},
 		},
-		shoulderPose: map[DirectionType]map[Direction]Position{
-			Right: {Up: {X: 0, Y: 1}, Down: {X: 0, Y: -1}},
-			Left:  {Up: {X: -3, Y: -1}, Down: {X: -3, Y: 1}},
+		Shoulder: {
+			Left:  {Up: "*", Down: "*"},
+			Right: {Up: "*", Down: "*"},
 		},
 	},
-	ShoulderHitInit: {
-		head: map[DirectionType]string{
-			Right: "):", Left: ":("},
-		headPose: map[DirectionType]Position{
-			Right: {X: 0, Y: 0},
-			Left:  {X: 0, Y: 0},
+	HeadInitHit: {
+		Head: {
+			Left:  {Up: "*"},
+			Right: {Up: "*"},
 		},
-		arm: map[DirectionType]map[Direction]string{
-			Right: {Up: "O══╮╮", Down: "O══╯╯"},
-			Left:  {Up: "╭╭══O", Down: "╰╰══O"}},
-		shoulder: map[DirectionType]map[Direction]string{
-			Right: {Up: "() *", Down: "() *"},
-			Left:  {Up: "* ()", Down: "* ()"}},
-		armPose: map[DirectionType]map[Direction]Position{
-			Right: {Up: {X: -4, Y: -2}, Down: {X: -4, Y: 2}},
-			Left:  {Up: {X: 1, Y: -2}, Down: {X: 1, Y: 2}},
-		},
-		shoulderPose: map[DirectionType]map[Direction]Position{
-			Right: {Up: {X: 0, Y: 1}, Down: {X: 0, Y: -1}},
-			Left:  {Up: {X: -2, Y: 1}, Down: {X: -2, Y: -1}},
+		Shoulder: {
+			Left:  {Up: "*", Down: "*"},
+			Right: {Up: "*", Down: "*"},
 		},
 	},
 	ShoulderHit: {
-		head: map[DirectionType]string{
-			Right: "):  *", Left: "*  :("},
-		headPose: map[DirectionType]Position{
-			Right: {X: 0, Y: 0},
-			Left:  {X: -3, Y: 0},
+		Head: {
+			Left:  {Up: "* "},
+			Right: {Up: " *"},
 		},
-		arm: map[DirectionType]map[Direction]string{
-			Right: {Up: "O══╮╮", Down: "O══╯╯"},
-			Left:  {Up: "╭╭══O", Down: "╰╰══O"}},
-		shoulder: map[DirectionType]map[Direction]string{
-			Right: {Up: "() * *", Down: "() * *"},
-			Left:  {Up: "* * ()", Down: "* * ()"}},
-		armPose: map[DirectionType]map[Direction]Position{
-			Right: {Up: {X: -4, Y: -2}, Down: {X: -4, Y: 2}},
-			Left:  {Up: {X: 1, Y: -2}, Down: {X: 1, Y: 2}},
+		Arm: {
+			Left:  {Up: "* ", Down: "* "},
+			Right: {Up: " *", Down: " *"},
 		},
-		shoulderPose: map[DirectionType]map[Direction]Position{
-			Right: {Up: {X: 0, Y: 1}, Down: {X: 0, Y: -1}},
-			Left:  {Up: {X: -4, Y: 1}, Down: {X: -4, Y: -1}},
+		Shoulder: {
+			Left:  {Up: "**", Down: "**"},
+			Right: {Up: "**", Down: "**"},
 		},
 	},
-	UpPunchInit: {
-		head: map[DirectionType]string{
-			Right: ">:", Left: ":<"},
-		headPose: map[DirectionType]Position{
-			Right: {X: 0, Y: 0},
-			Left:  {X: 0, Y: 0},
-		},
-		arm: map[DirectionType]map[Direction]string{
-			Right: {Up: "", Down: "O══╯╯"},
-			Left:  {Up: "", Down: "╰╰══O"}},
-		shoulder: map[DirectionType]map[Direction]string{
-			Right: {Up: "O══()", Down: "()"},
-			Left:  {Up: "()══O", Down: "()"}},
-		armPose: map[DirectionType]map[Direction]Position{
-			Right: {Up: {X: -1, Y: -2}, Down: {X: -4, Y: 2}},
-			Left:  {Up: {X: 1, Y: 2}, Down: {X: 1, Y: 2}},
-		},
-		shoulderPose: map[DirectionType]map[Direction]Position{
-			Right: {Up: {X: -3, Y: -1}, Down: {X: 0, Y: 1}},
-			Left:  {Up: {X: 0, Y: -1}, Down: {X: 0, Y: 1}},
+	ShoulderInitHit: {
+		Shoulder: {
+			Left:  {Up: "*", Down: "*"},
+			Right: {Up: "*", Down: "*"},
 		},
 	},
-	UpPunch: {
-		head: map[DirectionType]string{
-			Right: ">:", Left: ":<"},
-		headPose: map[DirectionType]Position{
-			Right: {X: 0, Y: 0},
-			Left:  {X: 0, Y: 0},
-		},
-		arm: map[DirectionType]map[Direction]string{
-			Right: {Up: "", Down: "O══╯╯"},
-			Left:  {Up: "", Down: "╰╰══O"}},
-		shoulder: map[DirectionType]map[Direction]string{
-			Right: {Up: "O═══()", Down: "()"},
-			Left:  {Up: "()═══O", Down: "()"}},
-		armPose: map[DirectionType]map[Direction]Position{
-			Right: {Up: {X: -1, Y: -2}, Down: {X: -1, Y: 2}},
-			Left:  {Up: {X: -1, Y: 2}, Down: {X: -2, Y: 2}},
-		},
-		shoulderPose: map[DirectionType]map[Direction]Position{
-			Right: {Up: {X: -5, Y: -1}, Down: {X: 1, Y: 1}},
-			Left:  {Up: {X: 1, Y: -1}, Down: {X: -1, Y: 1}},
-		},
+}
+
+var Positions = map[SituationType]map[BodyPart]map[VerDirection]Position{
+	Idle: {
+		Head:     {Up: {X: 0, Y: 0}},
+		Arm:      {Down: {X: 0, Y: +2}, Up: {X: 0, Y: -2}},
+		Shoulder: {Down: {X: 0, Y: +1}, Up: {X: 0, Y: -1}},
 	},
-	DownPunchInit: {
-		head: map[DirectionType]string{
-			Right: ">:", Left: ":<"},
-		headPose: map[DirectionType]Position{
-			Right: {X: 0, Y: 0},
-			Left:  {X: 0, Y: 0},
-		},
-		arm: map[DirectionType]map[Direction]string{
-			Right: {Up: "O══╮╮", Down: ""},
-			Left:  {Up: "╭╭══O", Down: ""}},
-		shoulder: map[DirectionType]map[Direction]string{
-			Right: {Up: "()", Down: "O══()"},
-			Left:  {Up: "()", Down: "()══O"}},
-		armPose: map[DirectionType]map[Direction]Position{
-			Right: {Up: {X: -4, Y: -2}, Down: {X: 2, Y: 2}},
-			Left:  {Up: {X: 1, Y: -2}, Down: {X: 1, Y: -2}},
-		},
-		shoulderPose: map[DirectionType]map[Direction]Position{
-			Right: {Up: {X: 0, Y: -1}, Down: {X: -4, Y: 1}},
-			Left:  {Up: {X: 0, Y: -1}, Down: {X: 0, Y: 1}},
-		},
+	Punch: {
+		Shoulder: {Down: {X: +1, Y: +1}, Up: {X: +1, Y: -1}},
 	},
-	DownPunch: {
-		head: map[DirectionType]string{
-			Right: ">:", Left: ":<"},
-		headPose: map[DirectionType]Position{
-			Right: {X: 0, Y: 0},
-			Left:  {X: 0, Y: 0},
-		},
-		arm: map[DirectionType]map[Direction]string{
-			Right: {Up: "O══╮╮", Down: ""},
-			Left:  {Up: "╭╭══O", Down: ""}},
-		shoulder: map[DirectionType]map[Direction]string{
-			Right: {Up: "()", Down: "O═══()"},
-			Left:  {Up: "()", Down: "()═══O"}},
-		armPose: map[DirectionType]map[Direction]Position{
-			Right: {Up: {X: -1, Y: -2}, Down: {X: -1, Y: 2}},
-			Left:  {Up: {X: -2, Y: -2}, Down: {X: 1, Y: 2}},
-		},
-		shoulderPose: map[DirectionType]map[Direction]Position{
-			Right: {Up: {X: 1, Y: -1}, Down: {X: -5, Y: 1}},
-			Left:  {Up: {X: -1, Y: -1}, Down: {X: 1, Y: 1}},
-		},
+	PunchInit: {
+		Shoulder: {Down: {X: 0, Y: +1}, Up: {X: 0, Y: -1}},
+	},
+	HeadHit: {
+		Head:     {Up: {X: -2, Y: 0}},
+		Arm:      {Down: {X: -3, Y: +2}, Up: {X: -3, Y: -2}},
+		Shoulder: {Down: {X: -2, Y: +1}, Up: {X: -2, Y: -1}},
+	},
+	HeadInitHit: {
+		Head:     {Up: {X: -1, Y: 0}},
+		Shoulder: {Down: {X: -2, Y: +1}, Up: {X: -2, Y: -1}},
+	},
+	ShoulderHit: {
+		Head:     {Up: {X: -2, Y: 0}},
+		Arm:      {Down: {X: -2, Y: +2}, Up: {X: -2, Y: -2}},
+		Shoulder: {Down: {X: -2, Y: +1}, Up: {X: -2, Y: -1}},
+	},
+	ShoulderInitHit: {
+		Shoulder: {Down: {X: -1, Y: +1}, Up: {X: -1, Y: -1}},
 	},
 }

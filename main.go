@@ -16,7 +16,7 @@ func clearScreen() {
 
 func spawnCage(cage Cage) {
 	var (
-		verticalWall   = "▌▌▌▌"
+		verticalWall   = "▌"
 		horizontalWall = "─"
 
 		reset = "\033[0m"
@@ -27,41 +27,66 @@ func spawnCage(cage Cage) {
 
 	// Spawn horizontal wall
 	// todo get from env
-	for y := 1; y < 4; y++ {
-		for x := 1; x <= cage.Limit.X; x++ {
+	for y := cage.Area[Min].Y - WallLength; y <= WallLength; y++ {
+		for x := cage.Area[Min].X - WallLength; x <= cage.Area[Max].X; x++ {
 			fmt.Printf("\033[%d;%dH%s%s%s", y, x, cage.Color, horizontalWall, reset)
-			fmt.Printf("\033[%d;%dH%s%s%s", cage.Limit.Y-(y-1), x, cage.Color, horizontalWall, reset)
+			fmt.Printf("\033[%d;%dH%s%s%s", cage.Area[Max].Y-(y-1), x, cage.Color, horizontalWall, reset)
 		}
 	}
-
-	for y := 1; y <= cage.Limit.Y; y++ {
-		fmt.Printf("\033[%d;%dH%s%s%s", y, 1, cage.Color, verticalWall, reset)
-		fmt.Printf("\033[%d;%dH%s%s%s", y, cage.Limit.X, cage.Color, verticalWall, reset)
+	// Spawn vertical wall
+	for y := cage.Area[Min].Y - WallLength; y <= cage.Area[Max].Y; y++ {
+		for x := cage.Area[Min].X - WallLength; x <= WallLength; x++ {
+			fmt.Printf("\033[%d;%dH%s%s%s", y, x, cage.Color, verticalWall, reset)
+			fmt.Printf("\033[%d;%dH%s%s%s", y, cage.Area[Max].X-(x-1), cage.Color, verticalWall, reset)
+		}
 	}
-	fmt.Printf("\033[%d;1H", cage.Limit.Y+10)
+	//Move cursor below term
+	//fmt.Printf("\033[%d;1H", cage.Area[Max].Y+10)
 }
 
-func spawnBoxers(cage Cage, boxerOne Boxer, boxerTwo Boxer) {
+func spawnGame(gameInfo GameInfo) {
 	//Spawn cage
-	spawnCage(cage)
+	spawnCage(gameInfo.Cage)
+	//Spawn players health bar
+	gameInfo.PrintHud()
 	//Spawn player 1
-	PrintPlayer(boxerOne)
+	PrintBoxer(*gameInfo.Boxers[Main], AllBodyParts, gameInfo.Boxers[Main].Color)
 	//Spawn player 2
-	PrintPlayer(boxerTwo)
-
-	// Move cursor below art
-	fmt.Printf("\033[%d;1H", cage.Limit.Y+10)
+	PrintBoxer(*gameInfo.Boxers[Opponent], AllBodyParts, gameInfo.Boxers[Opponent].Color)
+	// Move cursor below term
+	fmt.Printf("\033[%d;1H", gameInfo.Cage.Area[Max].Y+10)
 }
 
 func main() {
-	// Spawn cage
-	cageLimit := Position{X: 120, Y: 50}
-	cage := Cage{Limit: cageLimit, Color: "\033[44m"}
+	var gameInfo GameInfo
 
-	// Spawn boxer
-	boxerOne := Boxer{Pose: Position{X: 10, Y: 10}, Color: "\033[31m", Situation: Idle, Direction: Left}
-	boxerTwo := Boxer{Pose: Position{X: 30, Y: 10}, Color: "\033[32m", Situation: Idle, Direction: Right}
-	//spawnBoxer(cage, boxer)
+	//todo get from env
+	cageLimit := Position{X: 120, Y: 50}
+
+	// Init cage, boxers (gameInfo)
+	gameInfo = GameInfo{
+		Cage: Cage{
+			Color: "\033[44m",
+			Area: map[Bounds]*Position{
+				Min: {X: WallLength, Y: WallLength},
+				Max: {X: cageLimit.X - WallLength, Y: cageLimit.Y - WallLength}}},
+		Boxers: map[IsOpponent]*Boxer{
+			Main: {
+				Situation: Idle,
+				Direction: Left,
+				Name:      "User1",
+				Color:     "\033[31m",
+				Health:    MaxHealthPoint,
+				Position:  Position{X: 10, Y: 10},
+				Area:      map[Bounds]*Position{Min: {}, Max: {}}},
+			Opponent: {
+				Situation: Idle,
+				Direction: Right,
+				Name:      "User2",
+				Color:     "\033[32m",
+				Health:    MaxHealthPoint,
+				Position:  Position{X: 30, Y: 10},
+				Area:      map[Bounds]*Position{Min: {}, Max: {}}}}}
 
 	// put terminal in raw mode (no buffering, instant keypresses)
 	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
@@ -76,11 +101,15 @@ func main() {
 	go func() {
 		<-sigChan
 		clearScreen()
+		// todo reset buffer for holding a button
 		term.Restore(int(os.Stdin.Fd()), oldState)
 		os.Exit(0)
 	}()
 
-	spawnBoxers(cage, boxerOne, boxerTwo)
+	//Initialize occupied area
+	gameInfo.CalArea()
+	//Init spawn
+	spawnGame(gameInfo)
 
 	buf := make([]byte, 3) // arrow keys send 3 bytes like ESC [ A
 	for {
@@ -91,139 +120,35 @@ func main() {
 
 		switch string(buf[:n]) {
 		// Boxer 1
+		// Move
 		case "w": // up
-			if boxerOne.Pose.Y > 6 {
-				boxerOne.Pose.Y--
-				spawnBoxers(cage, boxerOne, boxerTwo)
-			}
+			gameInfo.BoxerMove(Up, Main)
 		case "s": // down
-			if boxerOne.Pose.Y < cageLimit.Y-6 {
-				boxerOne.Pose.Y++
-				spawnBoxers(cage, boxerOne, boxerTwo)
-			}
+			gameInfo.BoxerMove(Down, Main)
 		case "d": // right
-			if boxerOne.Pose.X < cageLimit.X-6 {
-				boxerOne.Pose.X++
-				spawnBoxers(cage, boxerOne, boxerTwo)
-			}
+			gameInfo.BoxerMove(Right, Main)
 		case "a": // left
-			if boxerOne.Pose.X > 5 {
-				boxerOne.Pose.X--
-				spawnBoxers(cage, boxerOne, boxerTwo)
-			}
-		case "z":
-			// Form init hit situations
-			boxerOne.Situation = UpPunchInit
-			boxerTwo.Situation = hitCheck(boxerOne, boxerTwo, Up, true)
-			spawnBoxers(cage, boxerOne, boxerTwo)
-
-			//Sleep to avoid blank term
-			time.Sleep(100 * time.Millisecond)
-			//time.Sleep(time.Second)
-
-			// Form hit situations
-			boxerOne.Situation = UpPunch
-			boxerTwo.Situation = hitCheck(boxerOne, boxerTwo, Up, false)
-			spawnBoxers(cage, boxerOne, boxerTwo)
-
-			//Sleep to avoid blank term
-			time.Sleep(100 * time.Millisecond)
-			//time.Sleep(time.Second)
-
-			//Reform back to default
-			boxerOne.Situation = Idle
-			boxerTwo.Situation = Idle
-			spawnBoxers(cage, boxerOne, boxerTwo)
-		case "x":
-			// Form init hit situations
-			boxerOne.Situation = DownPunchInit
-			boxerTwo.Situation = hitCheck(boxerOne, boxerTwo, Down, true)
-			spawnBoxers(cage, boxerOne, boxerTwo)
-
-			//Sleep to avoid blank term
-			time.Sleep(100 * time.Millisecond)
-			//time.Sleep(time.Second)
-
-			// Form hit situations
-			boxerOne.Situation = DownPunch
-			boxerTwo.Situation = hitCheck(boxerOne, boxerTwo, Down, false)
-			spawnBoxers(cage, boxerOne, boxerTwo)
-
-			//Sleep to avoid blank term
-			time.Sleep(100 * time.Millisecond)
-			//time.Sleep(time.Second)
-
-			//Reform back to default
-			boxerOne.Situation = Idle
-			boxerTwo.Situation = Idle
-			spawnBoxers(cage, boxerOne, boxerTwo)
+			gameInfo.BoxerMove(Left, Main)
+		// Punch
+		case "z": // Upper
+			gameInfo.BoxerPunch(Up, Main)
+		case "x": // Lower
+			gameInfo.BoxerPunch(Down, Main)
 		// Boxer 2
+		// Move
 		case "\033[A": // up
-			if boxerTwo.Pose.Y > 6 {
-				boxerTwo.Pose.Y--
-				spawnBoxers(cage, boxerOne, boxerTwo)
-			}
+			gameInfo.BoxerMove(Up, Opponent)
 		case "\033[B": // down
-			if boxerTwo.Pose.Y < cageLimit.Y-6 {
-				boxerTwo.Pose.Y++
-				spawnBoxers(cage, boxerOne, boxerTwo)
-			}
+			gameInfo.BoxerMove(Down, Opponent)
 		case "\033[C": // right
-			if boxerTwo.Pose.X < cageLimit.X-6 {
-				boxerTwo.Pose.X++
-				spawnBoxers(cage, boxerOne, boxerTwo)
-			}
+			gameInfo.BoxerMove(Right, Opponent)
 		case "\033[D": // left
-			if boxerTwo.Pose.X > 5 {
-				boxerTwo.Pose.X--
-				spawnBoxers(cage, boxerOne, boxerTwo)
-			}
-		case "n":
-			// Form init hit situations
-			boxerTwo.Situation = UpPunchInit
-			boxerOne.Situation = hitCheck(boxerTwo, boxerOne, Up, true)
-			spawnBoxers(cage, boxerOne, boxerTwo)
-
-			//Sleep to avoid blank term
-			//time.Sleep(time.Second)
-			time.Sleep(100 * time.Millisecond)
-
-			// Form hit situations
-			boxerTwo.Situation = UpPunch
-			boxerOne.Situation = hitCheck(boxerTwo, boxerOne, Up, false)
-			spawnBoxers(cage, boxerOne, boxerTwo)
-
-			//Sleep to avoid blank term
-			//time.Sleep(time.Second)
-			time.Sleep(100 * time.Millisecond)
-
-			//Reform back to default
-			boxerTwo.Situation = Idle
-			boxerOne.Situation = Idle
-			spawnBoxers(cage, boxerOne, boxerTwo)
-		case "m":
-			// Form init hit situations
-			boxerTwo.Situation = DownPunchInit
-			boxerOne.Situation = hitCheck(boxerTwo, boxerOne, Down, true)
-			spawnBoxers(cage, boxerOne, boxerTwo)
-
-			//Sleep to avoid blank term
-			//time.Sleep(time.Second)
-			time.Sleep(100 * time.Millisecond)
-
-			// Form hit situations
-			boxerTwo.Situation = DownPunch
-			boxerOne.Situation = hitCheck(boxerTwo, boxerOne, Down, false)
-			spawnBoxers(cage, boxerOne, boxerTwo)
-
-			//Sleep to avoid blank term
-			//time.Sleep(time.Second)
-			time.Sleep(100 * time.Millisecond)
-
-			//Reform back to default
-			boxerTwo.Situation = Idle
-			boxerOne.Situation = Idle
-			spawnBoxers(cage, boxerOne, boxerTwo)
+			gameInfo.BoxerMove(Left, Opponent)
+		// Punch
+		case "n": // Upper
+			gameInfo.BoxerPunch(Up, Opponent)
+		case "m": // Lower
+			gameInfo.BoxerPunch(Down, Opponent)
 		case "q", "Q": // quit
 			clearScreen()
 			return
