@@ -144,6 +144,7 @@ func (p *Position) CalPartPos(boxer Boxer, charLen int) {
 func frame(n float64) {
 	n += 3
 	n = n * 10
+	// Move cursor to end
 	fmt.Printf("\033[%d;1H", 10)
 	time.Sleep(time.Duration(n) * time.Millisecond)
 }
@@ -175,8 +176,8 @@ func (g GameInfo) BoxerMove(direction interface{}, opponent IsOpponent) {
 	if !g.cageCollide(copyBoxer) {
 		if !g.boxersCollide(opponent, &copyBoxer, parts) {
 			mainBoxer.boxerFrame(copyBoxer, parts)
-			//Sleep to avoid blank term
-			frame(1)
+			// Move cursor to end
+			fmt.Printf("\033[%d;1H", 10)
 		}
 	}
 }
@@ -189,7 +190,7 @@ func (g GameInfo) BoxerPunch(direction VerDirection, opponent IsOpponent) {
 		mBoxer         = g.Boxers[opponent]
 		sBoxer         = g.Boxers[!opponent]
 		mCopyBoxer     = *g.Boxers[opponent]
-		sCopyBoxer     = *g.Boxers[!opponent]
+		sCopyBoxer     Boxer
 	)
 	// Punch effect and get the hit point
 	hitPoint, mAffectedParts := PunchEffect(mBoxer, direction)
@@ -209,12 +210,14 @@ func (g GameInfo) BoxerPunch(direction VerDirection, opponent IsOpponent) {
 	frame(1)
 	// Form back to Idle
 	mBoxer.boxerFrame(mCopyBoxer, mAffectedParts)
+
 	if gotHit {
-		//copyBoxer.Situation = Idle
+		sCopyBoxer = *g.Boxers[!opponent]
+		sCopyBoxer.Situation = Idle
 		sBoxer.boxerFrame(sCopyBoxer, sAffectedParts)
 	}
-	//Sleep to avoid blank term
-	frame(1)
+	// Move cursor to end
+	fmt.Printf("\033[%d;1H", 10)
 }
 
 func (g GameInfo) cageCollide(boxer Boxer) bool {
@@ -314,11 +317,9 @@ func (g GameInfo) CalArea() {
 	for _, boxer := range g.Boxers {
 		switch boxer.Direction {
 		case Left:
-			PrintOn(Position{5, 6}, boxer.Color, "left boxer done")
 			boxer.Area[Max] = &Position{IdleBoxerForwardLength, IdleBoxerWidth}
 			boxer.Area[Min] = &Position{IdleBoxerBehindLength, -IdleBoxerWidth}
 		case Right:
-			PrintOn(Position{5, 7}, boxer.Color, "right boxer done")
 			boxer.Area[Max] = &Position{IdleBoxerBehindLength - 1, IdleBoxerWidth}
 			boxer.Area[Min] = &Position{-IdleBoxerForwardLength + 1, -IdleBoxerWidth}
 		}
@@ -352,9 +353,11 @@ func (b *Boxer) TakeDamage(bPart BodyPart) {
 	case Shoulder:
 		amount = ShoulderHitHp
 	}
+	PrintOn(Position{20, 21}, b.Color, fmt.Sprintf("b.Health: %d", b.Health))
 	b.Health -= amount
 	if b.Health < 0 {
 		// Change boxer Situation
+		clearScreen()
 		b.Health = 0
 	}
 }

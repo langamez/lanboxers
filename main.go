@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"golang.org/x/term"
 )
@@ -153,8 +152,6 @@ func main() {
 			clearScreen()
 			return
 		}
-
-		time.Sleep(30 * time.Millisecond)
 	}
 
 }
