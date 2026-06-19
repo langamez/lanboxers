@@ -1,6 +1,9 @@
 package main
 
-import "unicode/utf8"
+import (
+	"sync"
+	"unicode/utf8"
+)
 
 var (
 	WallLength             = 3
@@ -10,27 +13,40 @@ var (
 	AllBodyParts           = map[BodyPart][]VerDirection{Head: {Up}, Shoulder: {Up, Down}, Arm: {Up, Down}}
 )
 
+type Act int
 type Bounds bool
 type BodyPart int
 type IsOpponent bool
 type HorDirection bool
 type VerDirection bool
 type SituationType int
+type Boxers map[IsOpponent]*Boxer
 
 type Position struct {
 	X int // horizontal position
 	Y int // vertical position
 }
 
-type Boxer struct {
-	Area      map[Bounds]*Position
+type BaseBoxer struct {
 	Name      string
-	Color     string
 	Health    int
 	LastHit   int64 //timestamp
+	Color     string
 	Position  Position
+	Opponent  IsOpponent
 	Direction HorDirection
 	Situation SituationType
+	Area      map[Bounds]*Position
+}
+
+type Boxer struct {
+	*BaseBoxer
+	Lock sync.Mutex
+}
+
+type Event struct {
+	Act   Act
+	Actor IsOpponent
 }
 
 type Cage struct {
@@ -40,32 +56,47 @@ type Cage struct {
 
 type GameInfo struct {
 	Cage   Cage
-	Boxers map[IsOpponent]*Boxer
+	Boxers Boxers
 }
 
 const (
-	MaxHealthPoint  int           = 100
-	HeadHitHp       int           = 3
-	ShoulderHitHp   int           = 1
-	Min             Bounds        = false
-	Max             Bounds        = true
-	Main            IsOpponent    = false
-	Opponent        IsOpponent    = true
-	Up              VerDirection  = false
-	Down            VerDirection  = true
-	Left            HorDirection  = false
-	Right           HorDirection  = true
-	Head            BodyPart      = 1
-	Shoulder        BodyPart      = 2
-	Arm             BodyPart      = 3
-	Idle            SituationType = 1
-	Punch           SituationType = 2
-	PunchInit       SituationType = 3
-	HeadHit         SituationType = 4
-	HeadInitHit     SituationType = 5
-	ShoulderHit     SituationType = 6
-	ShoulderInitHit SituationType = 7
+	MaxHealthPoint int          = 100
+	HeadHitHp      int          = 3
+	ShoulderHitHp  int          = 1
+	Min            Bounds       = false
+	Max            Bounds       = true
+	Main           IsOpponent   = false
+	Opponent       IsOpponent   = true
+	Up             VerDirection = false
+	Down           VerDirection = true
+	Left           HorDirection = false
+	Right          HorDirection = true
+
+	Head BodyPart = iota + 1
+	Shoulder
+	Arm
+
+	Idle SituationType = iota + 1
+	PunchInit
+	Punch
+	PunchPeak
+	HeadHit
+	HeadInitHit
+	ShoulderHit
+	ShoulderInitHit
+
+	DoMoveLeft Act = iota + 1
+	DoMoveDown
+	DoPunch
+	Quit
 )
+
+var OppChan = make(chan Event)
+var MainChan = make(chan Event)
+var Router = map[IsOpponent]chan Event{
+	Main:     MainChan,
+	Opponent: OppChan,
+}
 
 var BodyChars = map[SituationType]map[BodyPart]map[HorDirection]map[VerDirection]string{
 	Idle: {

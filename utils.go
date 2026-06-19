@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -14,7 +16,7 @@ func PrintOn(position Position, color, char string) {
 	fmt.Printf("\033[%d;%dH%s%s%s", position.Y, position.X, color, char, reset)
 }
 
-func hitCheck(subBoxer Boxer, hitPoint Position) (bool, BodyPart, VerDirection) {
+func hitCheck(subBoxer BaseBoxer, hitPoint Position) (bool, BodyPart, VerDirection) {
 	var (
 		charLen int
 		part    BodyPart
@@ -40,7 +42,7 @@ func hitCheck(subBoxer Boxer, hitPoint Position) (bool, BodyPart, VerDirection) 
 	return false, part, vDir
 }
 
-func RemoveBoxer(boxer Boxer, parts map[BodyPart][]VerDirection) {
+func RemoveBoxer(boxer BaseBoxer, parts map[BodyPart][]VerDirection) {
 	var (
 		char     string
 		charLen  int
@@ -58,7 +60,7 @@ func RemoveBoxer(boxer Boxer, parts map[BodyPart][]VerDirection) {
 	}
 }
 
-func PrintBoxer(boxer Boxer, parts map[BodyPart][]VerDirection, color string) {
+func PrintBoxer(boxer BaseBoxer, parts map[BodyPart][]VerDirection, color string) {
 	var (
 		char     string
 		position Position
@@ -76,7 +78,7 @@ func PrintBoxer(boxer Boxer, parts map[BodyPart][]VerDirection, color string) {
 func HitEffect(boxer *Boxer, bodyPart BodyPart, direction VerDirection) map[BodyPart][]VerDirection {
 
 	var (
-		copyBoxer   = *boxer
+		copyBoxer   = boxer.Snapshot()
 		affectParts map[BodyPart][]VerDirection
 	)
 
@@ -86,7 +88,6 @@ func HitEffect(boxer *Boxer, bodyPart BodyPart, direction VerDirection) map[Body
 		copyBoxer.Situation = HeadInitHit
 		affectParts = map[BodyPart][]VerDirection{Head: {Up}, Arm: {Up, Down}, Shoulder: {Up, Down}}
 		boxer.boxerFrame(copyBoxer, affectParts)
-		//Sleep to avoid blank term
 		frame(1)
 		//Main effect
 		copyBoxer.Situation = HeadHit
@@ -96,7 +97,6 @@ func HitEffect(boxer *Boxer, bodyPart BodyPart, direction VerDirection) map[Body
 		copyBoxer.Situation = ShoulderInitHit
 		affectParts = map[BodyPart][]VerDirection{Shoulder: {direction}}
 		boxer.boxerFrame(copyBoxer, affectParts)
-		//Sleep to avoid blank term
 		frame(1)
 		//Main effect
 		copyBoxer.Situation = ShoulderHit
@@ -106,31 +106,7 @@ func HitEffect(boxer *Boxer, bodyPart BodyPart, direction VerDirection) map[Body
 	return affectParts
 }
 
-func PunchEffect(boxer *Boxer, direction VerDirection) (Position, map[BodyPart][]VerDirection) {
-	var (
-		copyBoxer   = *boxer
-		hitPoint    = Positions[Punch][Shoulder][direction]
-		affectParts = map[BodyPart][]VerDirection{Shoulder: {direction}, Arm: {direction}}
-		charLen     = utf8.RuneCountInString(BodyChars[Punch][Shoulder][boxer.Direction][direction])
-	)
-
-	//Init effect
-	copyBoxer.Situation = PunchInit
-	boxer.boxerFrame(copyBoxer, affectParts)
-	frame(1)
-	//Sleep to avoid blank term
-	//Main effect
-	copyBoxer.Situation = Punch
-	boxer.boxerFrame(copyBoxer, affectParts)
-	//Find hit position
-	hitPoint.CalPartPos(*boxer, charLen)
-	if boxer.Direction == Left {
-		hitPoint.X += charLen
-	}
-	return hitPoint, affectParts
-}
-
-func (p *Position) CalPartPos(boxer Boxer, charLen int) {
+func (p *Position) CalPartPos(boxer BaseBoxer, charLen int) {
 	switch boxer.Direction {
 	case Left:
 		p.Y = boxer.Position.Y + p.Y
@@ -153,7 +129,7 @@ func (g GameInfo) BoxerMove(direction interface{}, opponent IsOpponent) {
 	var (
 		boxers    = g.Boxers
 		mainBoxer = boxers[opponent]
-		copyBoxer = *boxers[opponent]
+		copyBoxer = boxers[opponent].Snapshot()
 		parts     = map[BodyPart][]VerDirection{Head: {Up}, Shoulder: {Up, Down}, Arm: {Up, Down}}
 	)
 
@@ -185,17 +161,43 @@ func (g GameInfo) BoxerMove(direction interface{}, opponent IsOpponent) {
 func (g GameInfo) BoxerPunch(direction VerDirection, opponent IsOpponent) {
 	var (
 		gotHit         bool
+		sCopyBoxer     BaseBoxer
 		part           BodyPart
 		sAffectedParts map[BodyPart][]VerDirection
 		mBoxer         = g.Boxers[opponent]
 		sBoxer         = g.Boxers[!opponent]
-		mCopyBoxer     = *g.Boxers[opponent]
-		sCopyBoxer     Boxer
+		mCopyBoxer     = g.Boxers[opponent].Snapshot()
+		mAffectedParts = map[BodyPart][]VerDirection{Shoulder: {direction}, Arm: {direction}}
+		shCharLen      = utf8.RuneCountInString(BodyChars[Punch][Shoulder][mBoxer.Direction][direction])
 	)
-	// Punch effect and get the hit point
-	hitPoint, mAffectedParts := PunchEffect(mBoxer, direction)
+	// Check for subject boxer situation
+	// Init effect
+	mCopyBoxer.Situation = PunchInit
+	mBoxer.boxerFrame(mCopyBoxer, mAffectedParts)
+	frame(1)
+	hitPoint := Positions[Punch][Shoulder][direction]
+	hitPoint.CalPartPos(*mBoxer.BaseBoxer, shCharLen)
+	if mBoxer.Direction == Left {
+		hitPoint.X += shCharLen
+	}
+	gotHit, part, direction = hitCheck(*sBoxer.BaseBoxer, hitPoint)
+	if gotHit {
+		g.HitLogic(!opponent, part, direction)
+	}
+	// Check for subject boxer situation
+	if sBoxer.Situation != PunchInit {
+		// Main effect
+		mCopyBoxer.Situation = Punch
+		mBoxer.boxerFrame(mCopyBoxer, mAffectedParts)
+		//Find hit position
+		//hitPoint := PunchEffect(mBoxer, direction)
+	} else {
+		PrintOn(Position{20, 20}, sBoxer.Color, "is in punch init")
+		return
+	}
+
 	// Check for subject boxer hit
-	gotHit, part, direction = hitCheck(*sBoxer, hitPoint)
+	gotHit, part, direction = hitCheck(sBoxer.Snapshot(), hitPoint)
 	if gotHit {
 		// Hit effect
 		sAffectedParts = HitEffect(sBoxer, part, direction)
@@ -206,13 +208,13 @@ func (g GameInfo) BoxerPunch(direction VerDirection, opponent IsOpponent) {
 		// Set last hit timestamp
 		sBoxer.LastHit = time.Now().Unix()
 	}
-	//Sleep to avoid blank term
 	frame(1)
 	// Form back to Idle
+	mCopyBoxer.Situation = Idle
 	mBoxer.boxerFrame(mCopyBoxer, mAffectedParts)
 
 	if gotHit {
-		sCopyBoxer = *g.Boxers[!opponent]
+		sCopyBoxer = *g.Boxers[!opponent].BaseBoxer
 		sCopyBoxer.Situation = Idle
 		sBoxer.boxerFrame(sCopyBoxer, sAffectedParts)
 	}
@@ -220,7 +222,7 @@ func (g GameInfo) BoxerPunch(direction VerDirection, opponent IsOpponent) {
 	fmt.Printf("\033[%d;1H", 10)
 }
 
-func (g GameInfo) cageCollide(boxer Boxer) bool {
+func (g GameInfo) cageCollide(boxer BaseBoxer) bool {
 	// Get boxer related areas
 	bMin := *boxer.Area[Min]
 	bMax := *boxer.Area[Max]
@@ -238,7 +240,7 @@ func (g GameInfo) cageCollide(boxer Boxer) bool {
 	return false
 }
 
-func (g GameInfo) boxersCollide(opponent IsOpponent, mBoxer *Boxer, parts map[BodyPart][]VerDirection) bool {
+func (g GameInfo) boxersCollide(opponent IsOpponent, mBoxer *BaseBoxer, parts map[BodyPart][]VerDirection) bool {
 	var (
 		collide = false
 		sBoxer  = g.Boxers[!opponent]
@@ -268,7 +270,7 @@ func (g GameInfo) boxersCollide(opponent IsOpponent, mBoxer *Boxer, parts map[Bo
 					// Override
 					collide = false
 					// Make a copy to change
-					sCopyBoxer := *g.Boxers[!opponent]
+					sCopyBoxer := g.Boxers[!opponent].Snapshot()
 					// Set new position based on direction
 					mBoxer.Position.X += IdleBoxerForwardLength + 1
 					sCopyBoxer.Position.X -= IdleBoxerForwardLength + 1
@@ -294,7 +296,7 @@ func (g GameInfo) boxersCollide(opponent IsOpponent, mBoxer *Boxer, parts map[Bo
 					// Override
 					collide = false
 					// Make a copy to change
-					sCopyBoxer := *g.Boxers[!opponent]
+					sCopyBoxer := g.Boxers[!opponent].Snapshot()
 					// Set new position based on direction
 					mBoxer.Position.X -= IdleBoxerForwardLength
 					sCopyBoxer.Position.X += IdleBoxerForwardLength
@@ -326,18 +328,21 @@ func (g GameInfo) CalArea() {
 	}
 }
 
-func (b *Boxer) boxerFrame(copyBoxer Boxer, parts map[BodyPart][]VerDirection) {
-	if copyBoxer.Situation < 4 {
+func (b *Boxer) boxerFrame(copyBoxer BaseBoxer, parts map[BodyPart][]VerDirection) {
+	color := "\033[31m"
+	// Hit effect is beside the boxer body parts
+	// so it will not remove the parts if it was a hit
+	if copyBoxer.Situation < HeadHit {
 		// Not getting hit
-		RemoveBoxer(*b, parts)
-		*b = copyBoxer
-		PrintBoxer(*b, parts, b.Color)
-	} else {
-		// Gotten hit
-		// Hit effect doesn't affect on base parts
-		*b = copyBoxer
-		PrintBoxer(*b, parts, "\033[31m")
+		color = b.Color
+		RemoveBoxer(*b.BaseBoxer, parts)
 	}
+
+	b.Lock.Lock()
+	*b.BaseBoxer = copyBoxer
+	b.Lock.Unlock()
+
+	PrintBoxer(*b.BaseBoxer, parts, color)
 }
 
 func (p *Position) AddPosition(a Position) {
@@ -353,7 +358,6 @@ func (b *Boxer) TakeDamage(bPart BodyPart) {
 	case Shoulder:
 		amount = ShoulderHitHp
 	}
-	PrintOn(Position{20, 21}, b.Color, fmt.Sprintf("b.Health: %d", b.Health))
 	b.Health -= amount
 	if b.Health < 0 {
 		// Change boxer Situation
@@ -419,4 +423,106 @@ func (g GameInfo) PrintName(opponent IsOpponent) {
 	}
 	//Print
 	PrintOn(namePos, g.Boxers[opponent].Color, g.Boxers[opponent].Name)
+}
+
+func EventDispatcher(in <-chan Event, router map[IsOpponent]chan Event) {
+	for e := range in {
+		if ch, ok := router[e.Actor]; ok {
+			ch <- e
+		}
+	}
+}
+
+func ReadKeyboard(cancel context.CancelFunc, eventChan chan<- Event) {
+	buf := make([]byte, 3)
+
+	for {
+		n, err := os.Stdin.Read(buf)
+		if err != nil || n == 0 {
+			continue
+		}
+		mainEvent := Event{Actor: Main}
+		oppEvent := Event{Actor: Opponent}
+
+		switch string(buf[:n]) {
+		// Boxer 1
+		// Move
+		case "w": // up
+			mainEvent.Act = -DoMoveDown
+			eventChan <- mainEvent
+		case "s": // down
+			mainEvent.Act = DoMoveDown
+			eventChan <- mainEvent
+		case "d": // right
+			mainEvent.Act = -DoMoveLeft
+			eventChan <- mainEvent
+		case "a": // left
+			mainEvent.Act = DoMoveLeft
+			eventChan <- mainEvent
+		// Punch
+		case "z": // Upper
+			mainEvent.Act = -DoPunch
+			eventChan <- mainEvent
+		case "x": // Lower
+			mainEvent.Act = DoPunch
+			eventChan <- mainEvent
+		// Boxer 2
+		// Move
+		case "\033[A": // up
+			oppEvent.Act = -DoMoveDown
+			eventChan <- oppEvent
+		case "\033[B": // down
+			oppEvent.Act = DoMoveDown
+			eventChan <- oppEvent
+		case "\033[C": // right
+			oppEvent.Act = -DoMoveLeft
+			eventChan <- oppEvent
+		case "\033[D": // left
+			oppEvent.Act = DoMoveLeft
+			eventChan <- oppEvent
+		// Punch
+		case "n": // Upper
+			oppEvent.Act = -DoPunch
+			eventChan <- oppEvent
+		case "m": // Lower
+			oppEvent.Act = DoPunch
+			eventChan <- oppEvent
+		case "q", "Q": // quit
+			clearScreen()
+			cancel()
+			return
+		}
+	}
+}
+
+func (b *Boxer) Snapshot() BaseBoxer {
+	return BaseBoxer{
+		Area:      b.Area,
+		Name:      b.Name,
+		Color:     b.Color,
+		Health:    b.Health,
+		LastHit:   b.LastHit,
+		Position:  b.Position,
+		Direction: b.Direction,
+		Situation: b.Situation,
+	}
+}
+
+func (g GameInfo) HitLogic(opp IsOpponent, part BodyPart, dir VerDirection) map[BodyPart][]VerDirection {
+	var (
+		affectedParts map[BodyPart][]VerDirection
+		boxer         = g.Boxers[opp]
+	)
+	// Hit effect
+	affectedParts = HitEffect(boxer, part, dir)
+	if part != Arm {
+		// Lower hp
+		boxer.TakeDamage(part)
+		// Print hp
+		g.PrintHealth(opp)
+		// Set last hit timestamp
+		boxer.LastHit = time.Now().Unix()
+	}
+
+	return affectedParts
 }

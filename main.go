@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"golang.org/x/term"
@@ -49,9 +51,9 @@ func spawnGame(gameInfo GameInfo) {
 	//Spawn players health bar
 	gameInfo.PrintHud()
 	//Spawn player 1
-	PrintBoxer(*gameInfo.Boxers[Main], AllBodyParts, gameInfo.Boxers[Main].Color)
+	PrintBoxer(gameInfo.Boxers[Main].Snapshot(), AllBodyParts, gameInfo.Boxers[Main].Color)
 	//Spawn player 2
-	PrintBoxer(*gameInfo.Boxers[Opponent], AllBodyParts, gameInfo.Boxers[Opponent].Color)
+	PrintBoxer(gameInfo.Boxers[Opponent].Snapshot(), AllBodyParts, gameInfo.Boxers[Opponent].Color)
 	// Move cursor below term
 	fmt.Printf("\033[%d;1H", gameInfo.Cage.Area[Max].Y+10)
 }
@@ -69,23 +71,29 @@ func main() {
 			Area: map[Bounds]*Position{
 				Min: {X: WallLength, Y: WallLength},
 				Max: {X: cageLimit.X - WallLength, Y: cageLimit.Y - WallLength}}},
-		Boxers: map[IsOpponent]*Boxer{
+		Boxers: Boxers{
 			Main: {
-				Situation: Idle,
-				Direction: Left,
-				Name:      "User1",
-				Color:     "\033[31m",
-				Health:    MaxHealthPoint,
-				Position:  Position{X: 10, Y: 10},
-				Area:      map[Bounds]*Position{Min: {}, Max: {}}},
+				Lock: sync.Mutex{},
+				BaseBoxer: &BaseBoxer{
+					Opponent:  Main,
+					Situation: Idle,
+					Direction: Left,
+					Name:      "User1",
+					Color:     "\033[31m",
+					Health:    MaxHealthPoint,
+					Position:  Position{X: 10, Y: 10},
+					Area:      map[Bounds]*Position{Min: {}, Max: {}}}},
 			Opponent: {
-				Situation: Idle,
-				Direction: Right,
-				Name:      "User2",
-				Color:     "\033[32m",
-				Health:    MaxHealthPoint,
-				Position:  Position{X: 30, Y: 10},
-				Area:      map[Bounds]*Position{Min: {}, Max: {}}}}}
+				Lock: sync.Mutex{},
+				BaseBoxer: &BaseBoxer{
+					Opponent:  Opponent,
+					Situation: Idle,
+					Direction: Right,
+					Name:      "User2",
+					Color:     "\033[32m",
+					Health:    MaxHealthPoint,
+					Position:  Position{X: 30, Y: 10},
+					Area:      map[Bounds]*Position{Min: {}, Max: {}}}}}}
 
 	// put terminal in raw mode (no buffering, instant keypresses)
 	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
@@ -110,50 +118,63 @@ func main() {
 	//Init spawn
 	spawnGame(gameInfo)
 
-	buf := make([]byte, 3) // arrow keys send 3 bytes like ESC [ A
-	for {
-		n, _ := os.Stdin.Read(buf)
-		if n == 0 {
-			continue
-		}
+	input := make(chan Event)
+	ctx, cancel := context.WithCancel(context.Background())
+	go ReadKeyboard(cancel, input)
+	go EventDispatcher(input, Router)
 
-		switch string(buf[:n]) {
-		// Boxer 1
-		// Move
-		case "w": // up
-			gameInfo.BoxerMove(Up, Main)
-		case "s": // down
-			gameInfo.BoxerMove(Down, Main)
-		case "d": // right
-			gameInfo.BoxerMove(Right, Main)
-		case "a": // left
-			gameInfo.BoxerMove(Left, Main)
-		// Punch
-		case "z": // Upper
-			gameInfo.BoxerPunch(Up, Main)
-		case "x": // Lower
-			gameInfo.BoxerPunch(Down, Main)
-		// Boxer 2
-		// Move
-		case "\033[A": // up
-			gameInfo.BoxerMove(Up, Opponent)
-		case "\033[B": // down
-			gameInfo.BoxerMove(Down, Opponent)
-		case "\033[C": // right
-			gameInfo.BoxerMove(Right, Opponent)
-		case "\033[D": // left
-			gameInfo.BoxerMove(Left, Opponent)
-		// Punch
-		case "n": // Upper
-			gameInfo.BoxerPunch(Up, Opponent)
-		case "m": // Lower
-			gameInfo.BoxerPunch(Down, Opponent)
-		case "q", "Q": // quit
-			clearScreen()
-			return
+	// Main boxer
+	go func() {
+		for event := range MainChan {
+			switch event.Act {
+			case DoPunch:
+				gameInfo.BoxerPunch(Down, Main)
+			case -DoPunch:
+				gameInfo.BoxerPunch(Up, Main)
+
+			case DoMoveDown:
+				gameInfo.BoxerMove(Down, Main)
+			case -DoMoveDown:
+				gameInfo.BoxerMove(Up, Main)
+
+			case DoMoveLeft:
+				gameInfo.BoxerMove(Left, Main)
+			case -DoMoveLeft:
+				gameInfo.BoxerMove(Right, Main)
+			default:
+				panic("unhandled default case")
+			}
 		}
+	}()
+
+	// Opponent boxer
+	go func() {
+		for event := range OppChan {
+			switch event.Act {
+			case DoPunch:
+				gameInfo.BoxerPunch(Down, Opponent)
+			case -DoPunch:
+				gameInfo.BoxerPunch(Up, Opponent)
+
+			case DoMoveDown:
+				gameInfo.BoxerMove(Down, Opponent)
+			case -DoMoveDown:
+				gameInfo.BoxerMove(Up, Opponent)
+
+			case DoMoveLeft:
+				gameInfo.BoxerMove(Left, Opponent)
+			case -DoMoveLeft:
+				gameInfo.BoxerMove(Right, Opponent)
+			default:
+				panic("unhandled default case")
+			}
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return
 	}
-
 }
 
 //fmt.Println(boxer.Color + " ╭╭══O" + reset)
