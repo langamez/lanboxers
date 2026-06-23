@@ -62,38 +62,44 @@ func main() {
 	var gameInfo GameInfo
 
 	//todo get from env
-	cageLimit := Position{X: 120, Y: 50}
+	cageLimit := Position{X: 80, Y: 30}
 
-	// Init cage, boxers (gameInfo)
+	// Init cage
 	gameInfo = GameInfo{
 		Cage: Cage{
 			Color: "\033[44m",
 			Area: map[Bounds]*Position{
 				Min: {X: WallLength, Y: WallLength},
-				Max: {X: cageLimit.X - WallLength, Y: cageLimit.Y - WallLength}}},
-		Boxers: Boxers{
-			Main: {
-				Lock: sync.Mutex{},
-				BaseBoxer: &BaseBoxer{
-					Opponent:  Main,
-					Situation: Idle,
-					Direction: Left,
-					Name:      "User1",
-					Color:     "\033[31m",
-					Health:    MaxHealthPoint,
-					Position:  Position{X: 10, Y: 10},
-					Area:      map[Bounds]*Position{Min: {}, Max: {}}}},
-			Opponent: {
-				Lock: sync.Mutex{},
-				BaseBoxer: &BaseBoxer{
-					Opponent:  Opponent,
-					Situation: Idle,
-					Direction: Right,
-					Name:      "User2",
-					Color:     "\033[32m",
-					Health:    MaxHealthPoint,
-					Position:  Position{X: 30, Y: 10},
-					Area:      map[Bounds]*Position{Min: {}, Max: {}}}}}}
+				Max: {X: cageLimit.X - WallLength, Y: cageLimit.Y - WallLength}}}}
+
+	//PrintOn(Position{20, 25}, "\u001B[44m", strconv.Itoa(gameInfo.Cage.Area[Max].X/3))
+	//PrintOn(Position{20, 26}, "\u001B[44m", strconv.Itoa((gameInfo.Cage.Area[Max].X/3)*2))
+	//frame(1000)
+
+	// Init boxers
+	gameInfo.Boxers = Boxers{
+		Main: {
+			Lock: sync.Mutex{},
+			BaseBoxer: &BaseBoxer{
+				Opponent:  Main,
+				Situation: Idle,
+				Direction: Left,
+				Name:      "User1",
+				Color:     "\033[31m",
+				Health:    MaxHealthPoint,
+				Position:  Position{X: gameInfo.Cage.Area[Max].X / 3, Y: gameInfo.Cage.Area[Max].Y / 2},
+				Area:      map[Bounds]*Position{Min: {}, Max: {}}}},
+		Opponent: {
+			Lock: sync.Mutex{},
+			BaseBoxer: &BaseBoxer{
+				Opponent:  Opponent,
+				Situation: Idle,
+				Direction: Right,
+				Name:      "User2",
+				Color:     "\033[32m",
+				Health:    MaxHealthPoint,
+				Position:  Position{X: (gameInfo.Cage.Area[Max].X / 3) * 2, Y: gameInfo.Cage.Area[Max].Y / 2},
+				Area:      map[Bounds]*Position{Min: {}, Max: {}}}}}
 
 	// put terminal in raw mode (no buffering, instant keypresses)
 	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
@@ -120,7 +126,8 @@ func main() {
 
 	input := make(chan Event)
 	ctx, cancel := context.WithCancel(context.Background())
-	go ReadKeyboard(cancel, input)
+	gameInfo.Cancel = cancel
+	go ReadKeyboard(gameInfo.Cancel, input)
 	go EventDispatcher(input, Router)
 
 	// Main boxer
@@ -128,14 +135,14 @@ func main() {
 		for event := range MainChan {
 			switch event.Act {
 			case DoPunch:
-				gameInfo.BoxerPunch(Down, Main)
+				gameInfo.BoxerPunch(Left, Main)
 			case -DoPunch:
-				gameInfo.BoxerPunch(Up, Main)
+				gameInfo.BoxerPunch(Right, Main)
 
 			case DoMoveDown:
-				gameInfo.BoxerMove(Down, Main)
+				gameInfo.BoxerMove(Lower, Main)
 			case -DoMoveDown:
-				gameInfo.BoxerMove(Up, Main)
+				gameInfo.BoxerMove(Upper, Main)
 
 			case DoMoveLeft:
 				gameInfo.BoxerMove(Left, Main)
@@ -152,14 +159,14 @@ func main() {
 		for event := range OppChan {
 			switch event.Act {
 			case DoPunch:
-				gameInfo.BoxerPunch(Down, Opponent)
+				gameInfo.BoxerPunch(Left, Opponent)
 			case -DoPunch:
-				gameInfo.BoxerPunch(Up, Opponent)
+				gameInfo.BoxerPunch(Right, Opponent)
 
 			case DoMoveDown:
-				gameInfo.BoxerMove(Down, Opponent)
+				gameInfo.BoxerMove(Lower, Opponent)
 			case -DoMoveDown:
-				gameInfo.BoxerMove(Up, Opponent)
+				gameInfo.BoxerMove(Upper, Opponent)
 
 			case DoMoveLeft:
 				gameInfo.BoxerMove(Left, Opponent)

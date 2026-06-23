@@ -16,33 +16,43 @@ func PrintOn(position Position, color, char string) {
 	fmt.Printf("\033[%d;%dH%s%s%s", position.Y, position.X, color, char, reset)
 }
 
-func hitCheck(subBoxer BaseBoxer, hitPoint Position) (bool, BodyPart, VerDirection) {
+func hitCheck(subBoxer BaseBoxer, hitPoint Position) (bool, BodyPart, HorDirection) {
 	var (
 		charLen int
 		part    BodyPart
-		vDir    VerDirection
+		dir     HorDirection
 	)
 	// Check for hit
 	for part = range Positions[Idle] {
-		for vDir = range Positions[Idle][part] {
-			partPos := Positions[Idle][part][vDir]
+		for dir = range Positions[Idle][part] {
+			charLen = utf8.RuneCountInString(BodyChars[subBoxer.Situation][part][subBoxer.Direction][dir])
+			if part != Head &&
+				subBoxer.Direction { // == right
+				dir = !dir
+			}
+			partPos := Positions[Idle][part][dir]
 			if part == Shoulder {
 				partPos.X += 2
 			}
-			charLen = utf8.RuneCountInString(BodyChars[subBoxer.Situation][part][subBoxer.Direction][vDir])
+			charLen = utf8.RuneCountInString(BodyChars[subBoxer.Situation][part][subBoxer.Direction][dir])
 			partPos.CalPartPos(subBoxer, charLen)
-			if subBoxer.Direction == Left {
+			if !subBoxer.Direction { // == Left
 				partPos.X += charLen
 			}
+
 			if hitPoint == partPos {
-				return true, part, vDir
+				if part != Head &&
+					subBoxer.Direction { // == right
+					dir = !dir
+				}
+				return true, part, dir
 			}
 		}
 	}
-	return false, part, vDir
+	return false, part, dir
 }
 
-func RemoveBoxer(boxer BaseBoxer, parts map[BodyPart][]VerDirection) {
+func RemoveBoxer(boxer BaseBoxer, parts map[BodyPart][]HorDirection) {
 	var (
 		char     string
 		charLen  int
@@ -50,60 +60,89 @@ func RemoveBoxer(boxer BaseBoxer, parts map[BodyPart][]VerDirection) {
 	)
 
 	for part := range parts {
-		for _, pDir := range parts[part] {
-			position = Positions[boxer.Situation][part][pDir]
-			charLen = utf8.RuneCountInString(BodyChars[boxer.Situation][part][boxer.Direction][pDir])
+		for _, dir := range parts[part] {
+			position = Positions[boxer.Situation][part][dir]
+			charLen = utf8.RuneCountInString(BodyChars[boxer.Situation][part][boxer.Direction][dir])
 			char = strings.Repeat(" ", charLen)
+			// Check if it's right boxer change the direction to opposite
+			if part != Head &&
+				boxer.Direction { // == Right
+				position = Positions[boxer.Situation][part][!dir]
+			}
 			position.CalPartPos(boxer, charLen)
 			PrintOn(position, "", char)
 		}
 	}
 }
 
-func PrintBoxer(boxer BaseBoxer, parts map[BodyPart][]VerDirection, color string) {
+func PrintBoxer(boxer BaseBoxer, parts map[BodyPart][]HorDirection, color string) {
 	var (
 		char     string
 		position Position
 	)
 	for part := range parts {
-		for _, pDir := range parts[part] {
-			position = Positions[boxer.Situation][part][pDir]
-			char = BodyChars[boxer.Situation][part][boxer.Direction][pDir]
+		for _, dir := range parts[part] {
+			position = Positions[boxer.Situation][part][dir]
+			char = BodyChars[boxer.Situation][part][boxer.Direction][dir]
+			// Check if it's right boxer change the direction to opposite
+			if part != Head &&
+				boxer.Direction { // == Right
+				position = Positions[boxer.Situation][part][!dir]
+			}
 			position.CalPartPos(boxer, utf8.RuneCountInString(char))
 			PrintOn(position, color, char)
 		}
 	}
 }
 
-func HitEffect(boxer *Boxer, bodyPart BodyPart, direction VerDirection) map[BodyPart][]VerDirection {
+func HitEffect(boxer *Boxer, bodyPart BodyPart, direction HorDirection) {
 
 	var (
+		baseSit     = boxer.Situation
 		copyBoxer   = boxer.Snapshot()
-		affectParts map[BodyPart][]VerDirection
+		affectParts map[BodyPart][]HorDirection
 	)
 
 	switch bodyPart {
 	case Head:
-		//Init effect
+		// Init effect
+		// Set lock
+		boxer.Lock.Lock()
 		copyBoxer.Situation = HeadInitHit
-		affectParts = map[BodyPart][]VerDirection{Head: {Up}, Arm: {Up, Down}, Shoulder: {Up, Down}}
+		affectParts = map[BodyPart][]HorDirection{Head: {Left}, Arm: {Left, Right}, Shoulder: {Left, Right}}
 		boxer.boxerFrame(copyBoxer, affectParts)
 		frame(1)
-		//Main effect
+		// Main effect
 		copyBoxer.Situation = HeadHit
 		boxer.boxerFrame(copyBoxer, AllBodyParts)
+		frame(1)
+		// Reform Idle
+		//sBaseSit = Idle
+		copyBoxer.Situation = baseSit
+		boxer.boxerFrame(copyBoxer, AllBodyParts)
+		// Release lock
+		boxer.Lock.Unlock()
 	case Shoulder:
-		//Init effect
+		// Init effect
+		// Set lock
+		boxer.Lock.Lock()
 		copyBoxer.Situation = ShoulderInitHit
-		affectParts = map[BodyPart][]VerDirection{Shoulder: {direction}}
+		affectParts = map[BodyPart][]HorDirection{Shoulder: {direction}}
 		boxer.boxerFrame(copyBoxer, affectParts)
 		frame(1)
-		//Main effect
+		// Main effect
 		copyBoxer.Situation = ShoulderHit
-		affectParts = map[BodyPart][]VerDirection{Head: {Up}, Arm: {direction}, Shoulder: {direction}}
+		affectParts = map[BodyPart][]HorDirection{Head: {Left}, Arm: {direction}, Shoulder: {direction}}
 		boxer.boxerFrame(copyBoxer, affectParts)
+		frame(1)
+		// Reform Idle
+		//sBaseSit = Idle
+		copyBoxer.Situation = baseSit
+		boxer.boxerFrame(copyBoxer, affectParts)
+		// Release lock
+		boxer.Lock.Unlock()
 	}
-	return affectParts
+	frame(1)
 }
 
 func (p *Position) CalPartPos(boxer BaseBoxer, charLen int) {
@@ -129,16 +168,17 @@ func (g GameInfo) BoxerMove(direction interface{}, opponent IsOpponent) {
 	var (
 		boxers    = g.Boxers
 		mainBoxer = boxers[opponent]
+		baseDir   = mainBoxer.Direction
 		copyBoxer = boxers[opponent].Snapshot()
-		parts     = map[BodyPart][]VerDirection{Head: {Up}, Shoulder: {Up, Down}, Arm: {Up, Down}}
+		parts     = map[BodyPart][]HorDirection{Head: {Left}, Shoulder: {Left, Right}, Arm: {Left, Right}}
 	)
 
 	switch direction.(type) {
 	case VerDirection:
 		switch direction {
-		case Up:
+		case Upper:
 			copyBoxer.Position.Y--
-		case Down:
+		case Lower:
 			copyBoxer.Position.Y++
 		}
 	case HorDirection:
@@ -152,71 +192,116 @@ func (g GameInfo) BoxerMove(direction interface{}, opponent IsOpponent) {
 	if !g.cageCollide(copyBoxer) {
 		if !g.boxersCollide(opponent, &copyBoxer, parts) {
 			mainBoxer.boxerFrame(copyBoxer, parts)
-			// Move cursor to end
-			fmt.Printf("\033[%d;1H", 10)
+			if baseDir != mainBoxer.Direction {
+				g.CalArea()
+			} // Override: Calculate boxer areas again
+			fmt.Printf("\033[%d;1H", 10) // Move cursor to end
+		}
+	}
+
+	if !g.cageCollide(copyBoxer) {
+		if !g.boxersCollide(opponent, &copyBoxer, parts) {
+			mainBoxer.boxerFrame(copyBoxer, parts)
+			if baseDir != mainBoxer.Direction {
+				g.CalArea()
+			} // Override: Calculate boxer areas again
+			fmt.Printf("\033[%d;1H", 10) // Move cursor to end
 		}
 	}
 }
 
-func (g GameInfo) BoxerPunch(direction VerDirection, opponent IsOpponent) {
+func (g GameInfo) BoxerPunch(direction HorDirection, opponent IsOpponent) {
 	var (
 		gotHit         bool
-		sCopyBoxer     BaseBoxer
+		pwPunch        bool
 		part           BodyPart
-		sAffectedParts map[BodyPart][]VerDirection
 		mBoxer         = g.Boxers[opponent]
 		sBoxer         = g.Boxers[!opponent]
 		mCopyBoxer     = g.Boxers[opponent].Snapshot()
-		mAffectedParts = map[BodyPart][]VerDirection{Shoulder: {direction}, Arm: {direction}}
+		mAffectedParts = map[BodyPart][]HorDirection{Shoulder: {direction}, Arm: {direction}}
 		shCharLen      = utf8.RuneCountInString(BodyChars[Punch][Shoulder][mBoxer.Direction][direction])
 	)
+	// Set punch direction
+	if mBoxer.Direction {
+		direction = !direction
+	}
+	mCopyBoxer.SituationDir = direction
 	// Check for subject boxer situation
+	if sBoxer.SituationDir != mBoxer.SituationDir {
+		switch sBoxer.Situation {
+		case Punch:
+			// I guess sub: power shot
+			// sBoxer: punch
+			// mBoxer: idle to punch init
+			pwPunch = true
+			//mCopyBoxer.Situation = PwHit
+			PrintOn(Position{20, 24}, mBoxer.Color, "got power shot")
+		case PunchInit:
+			// I guess: collapse
+			// sBoxer: punch init
+			// mBoxer: idle to punch init
+			//mCopyBoxer.Situation = Collapse
+			PrintOn(Position{20, 25}, sBoxer.Color, "collapse")
+		default:
+			mCopyBoxer.Situation = PunchInit
+		}
+	} else {
+		mCopyBoxer.Situation = PunchInit
+	}
 	// Init effect
-	mCopyBoxer.Situation = PunchInit
 	mBoxer.boxerFrame(mCopyBoxer, mAffectedParts)
 	frame(1)
-	hitPoint := Positions[Punch][Shoulder][direction]
-	hitPoint.CalPartPos(*mBoxer.BaseBoxer, shCharLen)
-	if mBoxer.Direction == Left {
-		hitPoint.X += shCharLen
-	}
-	gotHit, part, direction = hitCheck(*sBoxer.BaseBoxer, hitPoint)
-	if gotHit {
-		g.HitLogic(!opponent, part, direction)
-	}
+	PrintOn(Position{10, 10}, mBoxer.Color, "main punch init")
+	// Check for collapse
+	//if mCopyBoxer.Situation != Collapse {
 	// Check for subject boxer situation
-	if sBoxer.Situation != PunchInit {
+	if sBoxer.Situation != Punch {
 		// Main effect
 		mCopyBoxer.Situation = Punch
 		mBoxer.boxerFrame(mCopyBoxer, mAffectedParts)
+		PrintOn(Position{10, 11}, mBoxer.Color, "main punch")
 		//Find hit position
 		//hitPoint := PunchEffect(mBoxer, direction)
-	} else {
-		PrintOn(Position{20, 20}, sBoxer.Color, "is in punch init")
-		return
-	}
+		if sBoxer.Situation == PunchInit &&
+			sBoxer.SituationDir != mBoxer.SituationDir {
+			// hit with power shot
+			// sBoxer: punch init
+			// mBoxer: punch init to punch
+			pwPunch = true
+			PrintOn(Position{20, 26}, mBoxer.Color, "power punch")
+		}
 
-	// Check for subject boxer hit
-	gotHit, part, direction = hitCheck(sBoxer.Snapshot(), hitPoint)
-	if gotHit {
-		// Hit effect
-		sAffectedParts = HitEffect(sBoxer, part, direction)
-		// Lower hp
-		sBoxer.TakeDamage(part)
-		// Print hp
-		g.PrintHealth(!opponent)
-		// Set last hit timestamp
-		sBoxer.LastHit = time.Now().Unix()
+		// Get punch position
+		hitPoint := Positions[Punch][Shoulder][direction]
+		// Form based on boxer position to get real position
+		hitPoint.CalPartPos(*mBoxer.BaseBoxer, shCharLen)
+		if mBoxer.Direction == Left {
+			hitPoint.X += shCharLen
+		}
+		// Check for hit
+		gotHit, part, direction = hitCheck(*sBoxer.BaseBoxer, hitPoint)
+		if gotHit {
+			g.HitLogic(!opponent, part, direction, pwPunch)
+		}
+	} else {
+		PrintOn(Position{10, 11}, mBoxer.Color, "s in punch")
 	}
-	frame(1)
+	//else {
+	//	if sBoxer.VerticalSituation == mBoxer.VerticalSituation {
+	//		// Collapse
+	//		PrintOn(Position{20, 27}, sBoxer.Color, "got hit")
+	//	}
+	//}
+
 	// Form back to Idle
 	mCopyBoxer.Situation = Idle
 	mBoxer.boxerFrame(mCopyBoxer, mAffectedParts)
 
+	//}
+
 	if gotHit {
-		sCopyBoxer = *g.Boxers[!opponent].BaseBoxer
-		sCopyBoxer.Situation = Idle
-		sBoxer.boxerFrame(sCopyBoxer, sAffectedParts)
+
+		PrintOn(Position{20, 26}, sBoxer.Color, "to default")
 	}
 	// Move cursor to end
 	fmt.Printf("\033[%d;1H", 10)
@@ -240,7 +325,7 @@ func (g GameInfo) cageCollide(boxer BaseBoxer) bool {
 	return false
 }
 
-func (g GameInfo) boxersCollide(opponent IsOpponent, mBoxer *BaseBoxer, parts map[BodyPart][]VerDirection) bool {
+func (g GameInfo) boxersCollide(opponent IsOpponent, mBoxer *BaseBoxer, parts map[BodyPart][]HorDirection) bool {
 	var (
 		collide = false
 		sBoxer  = g.Boxers[!opponent]
@@ -258,7 +343,33 @@ func (g GameInfo) boxersCollide(opponent IsOpponent, mBoxer *BaseBoxer, parts ma
 	sMin.AddPosition(sBoxer.Position)
 	sMax.AddPosition(sBoxer.Position)
 	// Check for collide
-	if mBoxer.Direction == Left {
+	if mBoxer.Direction { //  == Right
+		if mMin.X <= sMax.X {
+			if mMin.Y >= sMin.Y && mMin.Y <= sMax.Y ||
+				mMax.Y >= sMin.Y && mMax.Y <= sMax.Y {
+				// Collide
+				collide = true
+			}
+			// Check for override
+			if mMin.X <= sMin.X {
+				if mMin.Y > sMax.Y || mMax.Y < sMin.Y {
+					// Override
+					collide = false
+					// Make a copy to change
+					sCopyBoxer := g.Boxers[!opponent].Snapshot()
+					// Set new position based on direction
+					mBoxer.Position.X -= IdleBoxerForwardLength
+					sCopyBoxer.Position.X += IdleBoxerForwardLength
+					// Set direction
+					g.Boxers[opponent].Direction, sCopyBoxer.Direction = sBoxer.Direction, mBoxer.Direction
+					// Print boxer
+					sBoxer.boxerFrame(sCopyBoxer, parts)
+					// Calculate boxer areas again
+					g.CalArea()
+				}
+			}
+		}
+	} else { //  == Left
 		if mMax.X >= sMin.X {
 			if mMin.Y >= sMin.Y && mMin.Y <= sMax.Y ||
 				mMax.Y >= sMin.Y && mMax.Y <= sMax.Y {
@@ -278,34 +389,6 @@ func (g GameInfo) boxersCollide(opponent IsOpponent, mBoxer *BaseBoxer, parts ma
 					mBoxer.Direction, sCopyBoxer.Direction = sBoxer.Direction, mBoxer.Direction
 					// Print boxer
 					sBoxer.boxerFrame(sCopyBoxer, parts)
-					// Calculate boxer areas again
-					g.CalArea()
-				}
-			}
-		}
-	} else if mBoxer.Direction == Right {
-		if mMin.X <= sMax.X {
-			if mMin.Y >= sMin.Y && mMin.Y <= sMax.Y ||
-				mMax.Y >= sMin.Y && mMax.Y <= sMax.Y {
-				// Collide
-				collide = true
-			}
-			// Check for override
-			if mMin.X <= sMin.X {
-				if mMin.Y > sMax.Y || mMax.Y < sMin.Y {
-					// Override
-					collide = false
-					// Make a copy to change
-					sCopyBoxer := g.Boxers[!opponent].Snapshot()
-					// Set new position based on direction
-					mBoxer.Position.X -= IdleBoxerForwardLength
-					sCopyBoxer.Position.X += IdleBoxerForwardLength
-					// Set direction
-					mBoxer.Direction, sCopyBoxer.Direction = sBoxer.Direction, mBoxer.Direction
-					// Print boxer
-					sBoxer.boxerFrame(sCopyBoxer, parts)
-					// Calculate boxer areas again
-					g.CalArea()
 				}
 			}
 		}
@@ -328,19 +411,21 @@ func (g GameInfo) CalArea() {
 	}
 }
 
-func (b *Boxer) boxerFrame(copyBoxer BaseBoxer, parts map[BodyPart][]VerDirection) {
+func (b *Boxer) boxerFrame(copyBoxer BaseBoxer, parts map[BodyPart][]HorDirection) {
 	color := "\033[31m"
 	// Hit effect is beside the boxer body parts
 	// so it will not remove the parts if it was a hit
 	if copyBoxer.Situation < HeadHit {
+		//if sit < HeadHit {
 		// Not getting hit
 		color = b.Color
 		RemoveBoxer(*b.BaseBoxer, parts)
 	}
 
-	b.Lock.Lock()
+	//b.Lock.Lock()
 	*b.BaseBoxer = copyBoxer
-	b.Lock.Unlock()
+	//b.BaseBoxer.Situation = sit
+	//b.Lock.Unlock()
 
 	PrintBoxer(*b.BaseBoxer, parts, color)
 }
@@ -350,19 +435,29 @@ func (p *Position) AddPosition(a Position) {
 	p.Y += a.Y
 }
 
-func (b *Boxer) TakeDamage(bPart BodyPart) {
-	var amount int
+func (g GameInfo) TakeDamage(opp IsOpponent, bPart BodyPart) {
+	var (
+		amount int
+		boxer  = g.Boxers[opp]
+	)
 	switch bPart {
 	case Head:
 		amount = HeadHitHp
 	case Shoulder:
 		amount = ShoulderHitHp
 	}
-	b.Health -= amount
-	if b.Health < 0 {
+	boxer.Health -= amount
+	// Set last hit timestamp
+	boxer.LastHit = time.Now().Unix()
+	// Print hp
+	g.PrintHealth(opp)
+	if !(boxer.Health > 0) {
 		// Change boxer Situation
 		clearScreen()
-		b.Health = 0
+		PrintOn(Position{20, 24}, boxer.Color, "Loser")
+		frame(100)
+		g.Cancel()
+		//boxer.Health = 0
 	}
 }
 
@@ -460,10 +555,10 @@ func ReadKeyboard(cancel context.CancelFunc, eventChan chan<- Event) {
 			mainEvent.Act = DoMoveLeft
 			eventChan <- mainEvent
 		// Punch
-		case "z": // Upper
+		case "z": // Left
 			mainEvent.Act = -DoPunch
 			eventChan <- mainEvent
-		case "x": // Lower
+		case "x": // Right
 			mainEvent.Act = DoPunch
 			eventChan <- mainEvent
 		// Boxer 2
@@ -481,10 +576,10 @@ func ReadKeyboard(cancel context.CancelFunc, eventChan chan<- Event) {
 			oppEvent.Act = DoMoveLeft
 			eventChan <- oppEvent
 		// Punch
-		case "n": // Upper
+		case "n": // Left
 			oppEvent.Act = -DoPunch
 			eventChan <- oppEvent
-		case "m": // Lower
+		case "m": // Right
 			oppEvent.Act = DoPunch
 			eventChan <- oppEvent
 		case "q", "Q": // quit
@@ -508,21 +603,18 @@ func (b *Boxer) Snapshot() BaseBoxer {
 	}
 }
 
-func (g GameInfo) HitLogic(opp IsOpponent, part BodyPart, dir VerDirection) map[BodyPart][]VerDirection {
+func (g GameInfo) HitLogic(opp IsOpponent, part BodyPart, dir HorDirection, PwPunch bool) {
 	var (
-		affectedParts map[BodyPart][]VerDirection
-		boxer         = g.Boxers[opp]
+		boxer = g.Boxers[opp]
 	)
 	// Hit effect
-	affectedParts = HitEffect(boxer, part, dir)
-	if part != Arm {
-		// Lower hp
-		boxer.TakeDamage(part)
-		// Print hp
-		g.PrintHealth(opp)
-		// Set last hit timestamp
-		boxer.LastHit = time.Now().Unix()
+	// Power hit
+	if PwPunch {
 	}
 
-	return affectedParts
+	HitEffect(boxer, part, dir)
+	if part != Arm {
+		// Lower hp
+		g.TakeDamage(opp, part)
+	}
 }

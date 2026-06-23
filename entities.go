@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"sync"
 	"unicode/utf8"
 )
@@ -9,8 +10,8 @@ var (
 	WallLength             = 3
 	IdleBoxerWidth         = 2
 	IdleBoxerBehindLength  = 0
-	IdleBoxerForwardLength = utf8.RuneCountInString(BodyChars[Idle][Arm][Left][Up])
-	AllBodyParts           = map[BodyPart][]VerDirection{Head: {Up}, Shoulder: {Up, Down}, Arm: {Up, Down}}
+	IdleBoxerForwardLength = utf8.RuneCountInString(BodyChars[Idle][Arm][Left][Left])
+	AllBodyParts           = map[BodyPart][]HorDirection{Head: {Left}, Shoulder: {Left, Right}, Arm: {Left, Right}}
 )
 
 type Act int
@@ -28,15 +29,16 @@ type Position struct {
 }
 
 type BaseBoxer struct {
-	Name      string
-	Health    int
-	LastHit   int64 //timestamp
-	Color     string
-	Position  Position
-	Opponent  IsOpponent
-	Direction HorDirection
-	Situation SituationType
-	Area      map[Bounds]*Position
+	Name         string
+	Health       int
+	LastHit      int64 //timestamp
+	Color        string
+	Position     Position
+	Opponent     IsOpponent
+	Direction    HorDirection
+	Situation    SituationType
+	SituationDir HorDirection
+	Area         map[Bounds]*Position
 }
 
 type Boxer struct {
@@ -57,6 +59,7 @@ type Cage struct {
 type GameInfo struct {
 	Cage   Cage
 	Boxers Boxers
+	Cancel context.CancelFunc
 }
 
 const (
@@ -67,8 +70,8 @@ const (
 	Max            Bounds       = true
 	Main           IsOpponent   = false
 	Opponent       IsOpponent   = true
-	Up             VerDirection = false
-	Down           VerDirection = true
+	Upper          VerDirection = false
+	Lower          VerDirection = true
 	Left           HorDirection = false
 	Right          HorDirection = true
 
@@ -98,106 +101,106 @@ var Router = map[IsOpponent]chan Event{
 	Opponent: OppChan,
 }
 
-var BodyChars = map[SituationType]map[BodyPart]map[HorDirection]map[VerDirection]string{
+var BodyChars = map[SituationType]map[BodyPart]map[HorDirection]map[HorDirection]string{
 	Idle: {
 		Head: {
-			Left:  {Up: "(:/)"},
-			Right: {Up: "(/:)"},
+			Left:  {Left: "(:/)"},
+			Right: {Left: "(/:)"},
 		},
 		Arm: {
-			Left:  {Up: "╭╭══O", Down: "╰╰══O"},
-			Right: {Up: "O══╮╮", Down: "O══╯╯"},
+			Left:  {Left: "╭╭══O", Right: "╰╰══O"},
+			Right: {Right: "O══╮╮", Left: "O══╯╯"},
 		},
 		Shoulder: {
-			Left:  {Up: "\\\\", Down: "//"},
-			Right: {Up: "//", Down: "\\\\"},
+			Left:  {Left: "\\\\", Right: "//"},
+			Right: {Right: "//", Left: "\\\\"},
 		},
 	},
 	Punch: {
 		Shoulder: {
-			Left:  {Up: "\\\\══O", Down: "//══O"},
-			Right: {Up: "O══//", Down: "O══\\\\"},
+			Left:  {Left: "\\\\══O", Right: "//══O"},
+			Right: {Right: "O══//", Left: "O══\\\\"},
 		},
 	},
 	PunchInit: {
 		Shoulder: {
-			Left:  {Up: "\\\\═O", Down: "//═O"},
-			Right: {Up: "O═//", Down: "O═\\\\"},
+			Left:  {Left: "\\\\═O", Right: "//═O"},
+			Right: {Right: "O═//", Left: "O═\\\\"},
 		},
 	},
 	HeadHit: {
 		Head: {
-			Left:  {Up: "**"},
-			Right: {Up: "**"},
+			Left:  {Left: "**"},
+			Right: {Right: "**"},
 		},
 		Arm: {
-			Left:  {Up: "* ", Down: "* "},
-			Right: {Up: " *", Down: " *"},
+			Left:  {Left: "* ", Right: "* "},
+			Right: {Right: " *", Left: " *"},
 		},
 		Shoulder: {
-			Left:  {Up: "*", Down: "*"},
-			Right: {Up: "*", Down: "*"},
+			Left:  {Left: "*", Right: "*"},
+			Right: {Right: "*", Left: "*"},
 		},
 	},
 	HeadInitHit: {
 		Head: {
-			Left:  {Up: "*"},
-			Right: {Up: "*"},
+			Left:  {Left: "*"},
+			Right: {Right: "*"},
 		},
 		Shoulder: {
-			Left:  {Up: "*", Down: "*"},
-			Right: {Up: "*", Down: "*"},
+			Left:  {Left: "*", Right: "*"},
+			Right: {Right: "*", Left: "*"},
 		},
 	},
 	ShoulderHit: {
 		Head: {
-			Left:  {Up: "* "},
-			Right: {Up: " *"},
+			Left:  {Left: "* "},
+			Right: {Left: " *"},
 		},
 		Arm: {
-			Left:  {Up: "* ", Down: "* "},
-			Right: {Up: " *", Down: " *"},
+			Left:  {Left: "* ", Right: "* "},
+			Right: {Right: " *", Left: " *"},
 		},
 		Shoulder: {
-			Left:  {Up: "**", Down: "**"},
-			Right: {Up: "**", Down: "**"},
+			Left:  {Left: "**", Right: "**"},
+			Right: {Right: "**", Left: "**"},
 		},
 	},
 	ShoulderInitHit: {
 		Shoulder: {
-			Left:  {Up: "*", Down: "*"},
-			Right: {Up: "*", Down: "*"},
+			Left:  {Left: "*", Right: "*"},
+			Right: {Right: "*", Left: "*"},
 		},
 	},
 }
 
-var Positions = map[SituationType]map[BodyPart]map[VerDirection]Position{
+var Positions = map[SituationType]map[BodyPart]map[HorDirection]Position{
 	Idle: {
-		Head:     {Up: {X: 0, Y: 0}},
-		Arm:      {Down: {X: 0, Y: +2}, Up: {X: 0, Y: -2}},
-		Shoulder: {Down: {X: 0, Y: +1}, Up: {X: 0, Y: -1}},
+		Head:     {Left: {X: 0, Y: 0}},
+		Arm:      {Right: {X: 0, Y: +2}, Left: {X: 0, Y: -2}},
+		Shoulder: {Right: {X: 0, Y: +1}, Left: {X: 0, Y: -1}},
 	},
 	Punch: {
-		Shoulder: {Down: {X: +1, Y: +1}, Up: {X: +1, Y: -1}},
+		Shoulder: {Right: {X: +1, Y: +1}, Left: {X: +1, Y: -1}},
 	},
 	PunchInit: {
-		Shoulder: {Down: {X: 0, Y: +1}, Up: {X: 0, Y: -1}},
+		Shoulder: {Right: {X: 0, Y: +1}, Left: {X: 0, Y: -1}},
 	},
 	HeadHit: {
-		Head:     {Up: {X: -2, Y: 0}},
-		Arm:      {Down: {X: -3, Y: +2}, Up: {X: -3, Y: -2}},
-		Shoulder: {Down: {X: -2, Y: +1}, Up: {X: -2, Y: -1}},
+		Head:     {Left: {X: -2, Y: 0}},
+		Arm:      {Right: {X: -3, Y: +2}, Left: {X: -3, Y: -2}},
+		Shoulder: {Right: {X: -2, Y: +1}, Left: {X: -2, Y: -1}},
 	},
 	HeadInitHit: {
-		Head:     {Up: {X: -1, Y: 0}},
-		Shoulder: {Down: {X: -2, Y: +1}, Up: {X: -2, Y: -1}},
+		Head:     {Left: {X: -1, Y: 0}},
+		Shoulder: {Right: {X: -2, Y: +1}, Left: {X: -2, Y: -1}},
 	},
 	ShoulderHit: {
-		Head:     {Up: {X: -2, Y: 0}},
-		Arm:      {Down: {X: -2, Y: +2}, Up: {X: -2, Y: -2}},
-		Shoulder: {Down: {X: -2, Y: +1}, Up: {X: -2, Y: -1}},
+		Head:     {Left: {X: -2, Y: 0}},
+		Arm:      {Right: {X: -2, Y: +2}, Left: {X: -2, Y: -2}},
+		Shoulder: {Right: {X: -2, Y: +1}, Left: {X: -2, Y: -1}},
 	},
 	ShoulderInitHit: {
-		Shoulder: {Down: {X: -1, Y: +1}, Up: {X: -1, Y: -1}},
+		Shoulder: {Right: {X: -1, Y: +1}, Left: {X: -1, Y: -1}},
 	},
 }
