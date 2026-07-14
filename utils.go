@@ -31,7 +31,10 @@ func hitCheck(subBoxer BaseBoxer, hitPoint Position) (bool, BodyPart, HorDirecti
 				dir = !dir
 			}
 			partPos := Positions[Idle][part][dir]
-			if part == Shoulder {
+			switch part {
+			case Arm:
+				partPos.X -= 1
+			case Shoulder:
 				partPos.X += 2
 			}
 			charLen = utf8.RuneCountInString(BodyChars[subBoxer.Situation][part][subBoxer.Direction][dir])
@@ -39,6 +42,12 @@ func hitCheck(subBoxer BaseBoxer, hitPoint Position) (bool, BodyPart, HorDirecti
 			if !subBoxer.Direction { // == Left
 				partPos.X += charLen
 			}
+
+			// todo add arm hit
+			//if part == Arm {
+			//	PrintOn(Position{10, 10}, subBoxer.Color, "hitpoint = "+strconv.Itoa(hitPoint.X)+":"+strconv.Itoa(hitPoint.Y))
+			//	PrintOn(Position{10, 11}, subBoxer.Color, "partpose = "+strconv.Itoa(partPos.X)+":"+strconv.Itoa(partPos.Y))
+			//}
 
 			if hitPoint == partPos {
 				if part != Head &&
@@ -102,12 +111,12 @@ func HitEffect(boxer *Boxer, bodyPart BodyPart, direction HorDirection) {
 		copyBoxer   = boxer.Snapshot()
 		affectParts map[BodyPart][]HorDirection
 	)
-
+	// Set lock
+	boxer.Lock.Lock()
 	switch bodyPart {
 	case Head:
 		// Init effect
 		// Set lock
-		boxer.Lock.Lock()
 		copyBoxer.Situation = HeadInitHit
 		affectParts = map[BodyPart][]HorDirection{Head: {Left}, Arm: {Left, Right}, Shoulder: {Left, Right}}
 		boxer.boxerFrame(copyBoxer, affectParts)
@@ -120,12 +129,8 @@ func HitEffect(boxer *Boxer, bodyPart BodyPart, direction HorDirection) {
 		//sBaseSit = Idle
 		copyBoxer.Situation = baseSit
 		boxer.boxerFrame(copyBoxer, AllBodyParts)
-		// Release lock
-		boxer.Lock.Unlock()
 	case Shoulder:
 		// Init effect
-		// Set lock
-		boxer.Lock.Lock()
 		copyBoxer.Situation = ShoulderInitHit
 		affectParts = map[BodyPart][]HorDirection{Shoulder: {direction}}
 		boxer.boxerFrame(copyBoxer, affectParts)
@@ -139,10 +144,11 @@ func HitEffect(boxer *Boxer, bodyPart BodyPart, direction HorDirection) {
 		//sBaseSit = Idle
 		copyBoxer.Situation = baseSit
 		boxer.boxerFrame(copyBoxer, affectParts)
-		// Release lock
-		boxer.Lock.Unlock()
+	case Arm:
 	}
 	frame(1)
+	// Release lock
+	boxer.Lock.Unlock()
 }
 
 func (p *Position) CalPartPos(boxer BaseBoxer, charLen int) {
@@ -227,21 +233,24 @@ func (g GameInfo) BoxerPunch(direction HorDirection, opponent IsOpponent) {
 	}
 	mCopyBoxer.SituationDir = direction
 	// Check for subject boxer situation
+	mBoxer.Lock.Lock()
 	if sBoxer.SituationDir != mBoxer.SituationDir {
 		switch sBoxer.Situation {
 		case Punch:
+			// todo do pw punch animation
 			// I guess sub: power shot
 			// sBoxer: punch
 			// mBoxer: idle to punch init
 			pwPunch = true
 			//mCopyBoxer.Situation = PwHit
-			PrintOn(Position{20, 24}, mBoxer.Color, "got power shot")
+			//PrintOn(Position{20, 24}, mBoxer.Color, "got power shot")
 		case PunchInit:
+			// todo do collapse animation
 			// I guess: collapse
 			// sBoxer: punch init
 			// mBoxer: idle to punch init
 			//mCopyBoxer.Situation = Collapse
-			PrintOn(Position{20, 25}, sBoxer.Color, "collapse")
+			//PrintOn(Position{20, 25}, sBoxer.Color, "collapse")
 		default:
 			mCopyBoxer.Situation = PunchInit
 		}
@@ -251,7 +260,6 @@ func (g GameInfo) BoxerPunch(direction HorDirection, opponent IsOpponent) {
 	// Init effect
 	mBoxer.boxerFrame(mCopyBoxer, mAffectedParts)
 	frame(1)
-	PrintOn(Position{10, 10}, mBoxer.Color, "main punch init")
 	// Check for collapse
 	//if mCopyBoxer.Situation != Collapse {
 	// Check for subject boxer situation
@@ -259,7 +267,6 @@ func (g GameInfo) BoxerPunch(direction HorDirection, opponent IsOpponent) {
 		// Main effect
 		mCopyBoxer.Situation = Punch
 		mBoxer.boxerFrame(mCopyBoxer, mAffectedParts)
-		PrintOn(Position{10, 11}, mBoxer.Color, "main punch")
 		//Find hit position
 		//hitPoint := PunchEffect(mBoxer, direction)
 		if sBoxer.Situation == PunchInit &&
@@ -268,7 +275,6 @@ func (g GameInfo) BoxerPunch(direction HorDirection, opponent IsOpponent) {
 			// sBoxer: punch init
 			// mBoxer: punch init to punch
 			pwPunch = true
-			PrintOn(Position{20, 26}, mBoxer.Color, "power punch")
 		}
 
 		// Get punch position
@@ -284,7 +290,8 @@ func (g GameInfo) BoxerPunch(direction HorDirection, opponent IsOpponent) {
 			g.HitLogic(!opponent, part, direction, pwPunch)
 		}
 	} else {
-		PrintOn(Position{10, 11}, mBoxer.Color, "s in punch")
+		// todo check for situation
+		//PrintOn(Position{10, 11}, mBoxer.Color, "s in punch")
 	}
 	//else {
 	//	if sBoxer.VerticalSituation == mBoxer.VerticalSituation {
@@ -296,13 +303,8 @@ func (g GameInfo) BoxerPunch(direction HorDirection, opponent IsOpponent) {
 	// Form back to Idle
 	mCopyBoxer.Situation = Idle
 	mBoxer.boxerFrame(mCopyBoxer, mAffectedParts)
+	mBoxer.Lock.Unlock()
 
-	//}
-
-	if gotHit {
-
-		PrintOn(Position{20, 26}, sBoxer.Color, "to default")
-	}
 	// Move cursor to end
 	fmt.Printf("\033[%d;1H", 10)
 }
@@ -520,11 +522,17 @@ func (g GameInfo) PrintName(opponent IsOpponent) {
 	PrintOn(namePos, g.Boxers[opponent].Color, g.Boxers[opponent].Name)
 }
 
-func EventDispatcher(in <-chan Event, router map[IsOpponent]chan Event) {
+//func EventDispatcher(in <-chan Event, router map[IsOpponent]chan Event) {
+//	for e := range in {
+//		if ch, ok := router[e.Actor]; ok {
+//			ch <- e
+//		}
+//	}
+//}
+
+func EventDispatcher(in <-chan Event) {
 	for e := range in {
-		if ch, ok := router[e.Actor]; ok {
-			ch <- e
-		}
+		ch <- e
 	}
 }
 
@@ -537,10 +545,9 @@ func ReadKeyboard(cancel context.CancelFunc, eventChan chan<- Event) {
 			continue
 		}
 		mainEvent := Event{Actor: Main}
-		oppEvent := Event{Actor: Opponent}
+		//oppEvent := Event{Actor: Opponent}
 
 		switch string(buf[:n]) {
-		// Boxer 1
 		// Move
 		case "w": // up
 			mainEvent.Act = -DoMoveDown
@@ -561,27 +568,28 @@ func ReadKeyboard(cancel context.CancelFunc, eventChan chan<- Event) {
 		case "x": // Right
 			mainEvent.Act = DoPunch
 			eventChan <- mainEvent
-		// Boxer 2
-		// Move
-		case "\033[A": // up
-			oppEvent.Act = -DoMoveDown
-			eventChan <- oppEvent
-		case "\033[B": // down
-			oppEvent.Act = DoMoveDown
-			eventChan <- oppEvent
-		case "\033[C": // right
-			oppEvent.Act = -DoMoveLeft
-			eventChan <- oppEvent
-		case "\033[D": // left
-			oppEvent.Act = DoMoveLeft
-			eventChan <- oppEvent
-		// Punch
-		case "n": // Left
-			oppEvent.Act = -DoPunch
-			eventChan <- oppEvent
-		case "m": // Right
-			oppEvent.Act = DoPunch
-			eventChan <- oppEvent
+
+		//// Boxer 2
+		//// Move
+		//case "\033[A": // up
+		//	oppEvent.Act = -DoMoveDown
+		//	eventChan <- oppEvent
+		//case "\033[B": // down
+		//	oppEvent.Act = DoMoveDown
+		//	eventChan <- oppEvent
+		//case "\033[C": // right
+		//	oppEvent.Act = -DoMoveLeft
+		//	eventChan <- oppEvent
+		//case "\033[D": // left
+		//	oppEvent.Act = DoMoveLeft
+		//	eventChan <- oppEvent
+		//// Punch
+		//case "n": // Left
+		//	oppEvent.Act = -DoPunch
+		//	eventChan <- oppEvent
+		//case "m": // Right
+		//	oppEvent.Act = DoPunch
+		//	eventChan <- oppEvent
 		case "q", "Q": // quit
 			clearScreen()
 			cancel()

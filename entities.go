@@ -94,12 +94,7 @@ const (
 	Quit
 )
 
-var OppChan = make(chan Event)
 var MainChan = make(chan Event)
-var Router = map[IsOpponent]chan Event{
-	Main:     MainChan,
-	Opponent: OppChan,
-}
 
 var BodyChars = map[SituationType]map[BodyPart]map[HorDirection]map[HorDirection]string{
 	Idle: {
