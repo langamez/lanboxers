@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"net"
 	"sync"
 	"unicode/utf8"
 )
@@ -46,10 +47,10 @@ type Boxer struct {
 	Lock sync.Mutex
 }
 
-type Event struct {
-	Act   Act
-	Actor IsOpponent
-}
+//type Event struct {
+//	Act   Act
+//	//Actor IsOpponent
+//}
 
 type Cage struct {
 	Color string
@@ -60,6 +61,11 @@ type GameInfo struct {
 	Cage   Cage
 	Boxers Boxers
 	Cancel context.CancelFunc
+}
+
+type Connection struct {
+	conn net.Conn
+	mu   sync.Mutex
 }
 
 const (
@@ -94,7 +100,16 @@ const (
 	Quit
 )
 
-var MainChan = make(chan Event)
+var (
+	Conn     *Connection
+	OppChan  = make(chan Act)
+	MainChan = make(chan Act)
+)
+
+//var Router = map[IsOpponent]chan Event{
+//	Main:     MainChan,
+//	Opponent: OppChan,
+//}
 
 var BodyChars = map[SituationType]map[BodyPart]map[HorDirection]map[HorDirection]string{
 	Idle: {

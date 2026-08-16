@@ -1,9 +1,15 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"encoding/binary"
+	"errors"
 	"fmt"
+	"io"
+	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -448,22 +454,22 @@ func (g GameInfo) TakeDamage(opp IsOpponent, bPart BodyPart) {
 	case Shoulder:
 		amount = ShoulderHitHp
 	}
-	boxer.Health -= amount
-	// Set last hit timestamp
-	boxer.LastHit = time.Now().Unix()
-	// Print hp
-	g.PrintHealth(opp)
-	if !(boxer.Health > 0) {
+	boxer.AddHealth(-amount)
+	if boxer.Health == 0 {
 		// Change boxer Situation
 		clearScreen()
 		PrintOn(Position{20, 24}, boxer.Color, "Loser")
 		frame(100)
 		g.Cancel()
-		//boxer.Health = 0
 	}
+
+	// Set last hit timestamp
+	boxer.LastHit = time.Now().Unix()
+	// Print hp
+	g.PrintHealth(opp)
 }
 
-func (b *Boxer) Heal(amount int) {
+func (b *Boxer) AddHealth(amount int) {
 	b.Health += amount
 	if b.Health > MaxHealthPoint {
 		b.Health = MaxHealthPoint
@@ -505,6 +511,7 @@ func (g GameInfo) PrintHealth(opponent IsOpponent) {
 }
 
 func (g GameInfo) PrintName(opponent IsOpponent) {
+	// todo correct name and hp bar position
 	var namePos = Position{0, g.Cage.Area[Min].Y + 1}
 	//Get cage length
 	cageLength := g.Cage.Area[Max].X - g.Cage.Area[Min].X
@@ -522,7 +529,7 @@ func (g GameInfo) PrintName(opponent IsOpponent) {
 	PrintOn(namePos, g.Boxers[opponent].Color, g.Boxers[opponent].Name)
 }
 
-//func EventDispatcher(in <-chan Event, router map[IsOpponent]chan Event) {
+//func EventRouter(in <-chan Event, router map[IsOpponent]chan Event) {
 //	for e := range in {
 //		if ch, ok := router[e.Actor]; ok {
 //			ch <- e
@@ -530,71 +537,232 @@ func (g GameInfo) PrintName(opponent IsOpponent) {
 //	}
 //}
 
-func EventDispatcher(in <-chan Event) {
-	for e := range in {
-		ch <- e
+func LocalIP() (string, error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return "", err
+	}
+
+	for _, addr := range addrs {
+		ipNet, ok := addr.(*net.IPNet)
+		if !ok || ipNet.IP.IsLoopback() {
+			continue
+		}
+
+		ip := ipNet.IP.To4()
+		if ip != nil {
+			return ip.String(), nil
+		}
+	}
+
+	return "", errors.New("no network connection found")
+}
+
+func GetConnectionInfo() (isHost bool, ip string) {
+	reader := bufio.NewReader(os.Stdin)
+
+	for {
+		fmt.Print("Host or Join? (h/j): ")
+
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(strings.ToLower(input))
+
+		switch input {
+		case "h", "host":
+			return true, ""
+
+		case "j", "join":
+			for {
+				fmt.Print("Host IP: ")
+
+				ip, _ = reader.ReadString('\n')
+				ip = strings.TrimSpace(ip)
+
+				if ip != "" {
+					return false, ip
+				}
+
+				fmt.Println("IP cannot be empty.")
+			}
+
+		default:
+			fmt.Println("Please enter 'h' or 'j'.")
+		}
 	}
 }
 
-func ReadKeyboard(cancel context.CancelFunc, eventChan chan<- Event) {
-	buf := make([]byte, 3)
+func NewConnection(conn net.Conn) *Connection {
+	return &Connection{
+		conn: conn,
+	}
+}
+
+func (c *Connection) Close() error {
+	return c.conn.Close()
+}
+
+func StartServer(port int) (*Connection, error) {
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Println("Listening...")
+
+	netConn, err := ln.Accept() // Blocks until one client connects.
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("Connected")
+
+	conn := NewConnection(netConn)
+
+	msg, err := conn.Receive()
+	if err != nil {
+		return nil, err
+	}
+
+	if msg != "CONNECTED" {
+		conn.Close()
+		return nil, fmt.Errorf("invalid handshake")
+	}
+
+	if err := conn.Send("OK"); err != nil {
+		return nil, err
+	}
+
+	fmt.Println("Client connected!")
+	fmt.Println("Starting game!")
+	frame(20)
+
+	// Start normal message processing
+	return conn, nil
+}
+
+func Dial(address string, port int) (*Connection, error) {
+	netConn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", address, port))
+	if err != nil {
+		return nil, err
+	}
+
+	conn := NewConnection(netConn)
+
+	if err := conn.Send("CONNECTED"); err != nil {
+		return nil, err
+	}
+
+	msg, err := conn.Receive()
+	if err != nil {
+		return nil, err
+	}
+
+	if msg != "OK" {
+		conn.Close()
+		return nil, fmt.Errorf("invalid handshake")
+	}
+
+	fmt.Println("Connected to host!")
+	fmt.Println("Starting game!")
+	frame(20)
+
+	return conn, nil
+}
+
+func (c *Connection) Send(data string) error {
+	var byteData = []byte(data)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	length := uint32(len(byteData))
+
+	if err := binary.Write(c.conn, binary.BigEndian, length); err != nil {
+		return err
+	}
+
+	_, err := c.conn.Write(byteData)
+	return err
+}
+
+func (c *Connection) SendAct(act Act) error {
+	var actStr = strconv.Itoa(int(act))
+	if err := c.Send(actStr); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Connection) Receive() (string, error) {
+	var length uint32
+
+	if err := binary.Read(c.conn, binary.BigEndian, &length); err != nil {
+		return "", err
+	}
+
+	buffer := make([]byte, length)
+
+	_, err := io.ReadFull(c.conn, buffer)
+	if err != nil {
+		return "", err
+	}
+
+	return string(buffer), nil
+}
+
+func (c *Connection) Listen(eventChan chan<- Act) {
+	for {
+		msg, err := c.Receive()
+		if err != nil {
+			fmt.Printf("error %s", err)
+			frame(100)
+		}
+
+		// Convert to Act
+		msgInt, err := strconv.Atoi(msg)
+		if err != nil {
+		}
+
+		eventChan <- Act(msgInt)
+	}
+}
+
+func ReadKeyboard(eventChan chan<- Act, isHost bool, conn *Connection, cancelFunc context.CancelFunc) {
+	var (
+		act Act
+		buf = make([]byte, 3)
+	)
 
 	for {
 		n, err := os.Stdin.Read(buf)
 		if err != nil || n == 0 {
 			continue
 		}
-		mainEvent := Event{Actor: Main}
-		//oppEvent := Event{Actor: Opponent}
 
 		switch string(buf[:n]) {
 		// Move
-		case "w": // up
-			mainEvent.Act = -DoMoveDown
-			eventChan <- mainEvent
-		case "s": // down
-			mainEvent.Act = DoMoveDown
-			eventChan <- mainEvent
-		case "d": // right
-			mainEvent.Act = -DoMoveLeft
-			eventChan <- mainEvent
-		case "a": // left
-			mainEvent.Act = DoMoveLeft
-			eventChan <- mainEvent
+		case "\033[A": // up
+			act = -DoMoveDown
+		case "\033[B": // down
+			act = DoMoveDown
+		case "\033[C": // right
+			act = -DoMoveLeft
+		case "\033[D": // left
+			act = DoMoveLeft
 		// Punch
-		case "z": // Left
-			mainEvent.Act = -DoPunch
-			eventChan <- mainEvent
-		case "x": // Right
-			mainEvent.Act = DoPunch
-			eventChan <- mainEvent
-
-		//// Boxer 2
-		//// Move
-		//case "\033[A": // up
-		//	oppEvent.Act = -DoMoveDown
-		//	eventChan <- oppEvent
-		//case "\033[B": // down
-		//	oppEvent.Act = DoMoveDown
-		//	eventChan <- oppEvent
-		//case "\033[C": // right
-		//	oppEvent.Act = -DoMoveLeft
-		//	eventChan <- oppEvent
-		//case "\033[D": // left
-		//	oppEvent.Act = DoMoveLeft
-		//	eventChan <- oppEvent
-		//// Punch
-		//case "n": // Left
-		//	oppEvent.Act = -DoPunch
-		//	eventChan <- oppEvent
-		//case "m": // Right
-		//	oppEvent.Act = DoPunch
-		//	eventChan <- oppEvent
+		case "n": // Left
+			act = -DoPunch
+		case "m": // Right
+			act = DoPunch
 		case "q", "Q": // quit
-			clearScreen()
-			cancel()
-			return
+			act = Quit
 		}
+
+		// Send to second player
+		if err := conn.SendAct(-act); err != nil {
+			clearScreen()
+			cancelFunc()
+		}
+		// Dispatch to channel
+		eventChan <- act
 	}
 }
 
