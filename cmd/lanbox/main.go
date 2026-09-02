@@ -1,0 +1,33 @@
+// package lanbox
+package main
+
+import (
+	"fmt"
+	"lanBox/game"
+	"lanBox/internal/terminal"
+	"lanBox/render"
+)
+
+func main() {
+	g := game.NewGame(terminal.Size())
+
+	session, err := game.NewSession(g)
+	if err != nil {
+		// todo: do in render
+		fmt.Println(err)
+		return
+	}
+
+	terminalSession, err := terminal.Start(g.Cancel)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer terminalSession.Close()
+
+	render.DrawGame(g.RenderConverter())
+
+	session.Start()
+
+	<-g.Context.Done()
+}
