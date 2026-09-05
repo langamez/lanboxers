@@ -4,8 +4,13 @@ type Bound int
 type BodyPart int
 type PlayerID int
 type Direction int
-type Situation int
+type SituationType int
 type VerticalDirection int
+
+type Situation struct {
+	Direction     Direction
+	SituationType SituationType
+}
 
 const (
 	Min Bound = iota
@@ -49,7 +54,7 @@ const (
 )
 
 const (
-	Idle Situation = iota + 1
+	Idle SituationType = iota + 1
 	PunchInit
 	Punch
 	PunchPeak

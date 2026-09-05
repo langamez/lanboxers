@@ -1,11 +1,12 @@
 package game
 
 import (
+	"time"
+	"unicode/utf8"
+
 	"github.com/langamez/lanboxers/domain"
 	"github.com/langamez/lanboxers/render"
 	"github.com/langamez/lanboxers/sprites"
-	"time"
-	"unicode/utf8"
 )
 
 func (g *Game) BoxerPunch(
@@ -15,15 +16,24 @@ func (g *Game) BoxerPunch(
 	attacker := g.Boxers[attackerID]
 	defender := g.Boxers[attackerID.Opposite()]
 
+	mCopyBoxer := Snapshot(attacker.BaseBoxer)
+	affectedParts := map[domain.BodyPart][]domain.Direction{domain.Shoulder: {direction}, domain.Arm: {direction}}
+
+	// Init
+	mCopyBoxer.Situation = domain.Situation{SituationType: domain.PunchInit, Direction: direction}
+	g.UpdateBoxer(attackerID, mCopyBoxer, affectedParts)
+	// Main effect
+	mCopyBoxer.Situation.SituationType = domain.Punch
+	g.UpdateBoxer(attackerID, mCopyBoxer, affectedParts)
+	// Form back to Idle
+	mCopyBoxer.Situation.SituationType = domain.Idle
+	g.UpdateBoxer(attackerID, mCopyBoxer, affectedParts)
+
 	punch := NewPunch(attacker, direction)
-
-	render.PlayPunch(punch)
-
 	hit, part, dir := CheckHit(punch, defender)
 
 	if hit {
-		g.HitLogic(part, attackerID.Opposite())
-		render.HitEffect(defender, part, dir)
+		g.BoxerHit(part, attackerID.Opposite(), dir)
 	}
 }
 
@@ -41,6 +51,7 @@ func (g *Game) HitLogic(
 	part domain.BodyPart,
 	playerID domain.PlayerID,
 ) {
+	// todo:
 	// Hit effect
 	// Power hit
 	//if pw {
@@ -64,31 +75,16 @@ func CheckHit(
 
 	// calculate punch position
 	hitPoint := sprites.CalculateHitPoint(punch)
-	//render.PrintOn(domain.Position{10, 10}, punch.Attacker.Color, fmt.Sprintf("hitpoint = %d:%d", hitPoint.X, hitPoint.Y))
-	//render.PrintOn(domain.Position{punch.Attacker.Position.X + 5, punch.Attacker.Position.Y}, punch.Attacker.Color, fmt.Sprintf("boxer position = %d:%d", punch.Attacker.Position.X, punch.Attacker.Position.Y))
-	//char := fmt.Sprintf("suboxer position = %d:%d", defender.Position.X, defender.Position.Y)
-	//render.PrintOn(domain.Position{defender.Position.X - utf8.RuneCountInString(char) - 5, defender.Position.Y}, defender.Color, fmt.Sprintf("suboxer position = %d:%d", defender.Position.X, defender.Position.Y))
-
 	// Compare with defender body parts
 	for part = range sprites.SpriteLayouts[domain.Idle].Parts {
 		for dir = range sprites.SpriteLayouts[domain.Idle].Parts[part] {
-			charLen = utf8.RuneCountInString(sprites.GetBodyChar(part, dir, defender.Situation, defender.Direction))
-			if part != domain.Head &&
-				punch.Attacker.Direction == domain.Right {
-				//render.PrintOn(domain.Position{10, 13}, defender.Color, fmt.Sprintf("changed from %d dir to: %d", dir, dir.Opposite()))
-				dir = dir.Opposite()
-			}
+			charLen = utf8.RuneCountInString(sprites.GetBodyChar(part, dir, defender.Situation.SituationType, defender.Direction))
 			partPos := sprites.GetPosition(part, dir, domain.Idle)
 			partPos = sprites.CalculatePartPosition(charLen, defender.BaseBoxer, partPos)
 
-			if part == domain.Shoulder &&
-				dir == domain.Right {
-				//render.PrintOn(domain.Position{10, 14}, defender.Color, fmt.Sprintf("partpose = %d:%d", partPos.X, partPos.Y))
+			if defender.Direction == domain.Right {
+				dir = dir.Opposite()
 			}
-
-			//if defender.Direction == domain.Left { // == Left
-			//	partPos.X += charLen
-			//}
 
 			// todo add arm hit
 			//if part == Arm {
@@ -123,17 +119,60 @@ func (g *Game) TakeDamage(
 		amount = domain.ShoulderHitHP
 	}
 	g.Boxers[playerID].AddHealth(-amount)
-	if g.Boxers[playerID].Health == 0 {
-		// todo: move these to render
-		// ex: render.LoseGame()
-		//render.PrintOn(domain.Position{X: 20, Y: 24}, g.Boxers[playerID].Color, "Loser")
-		render.Frame(100)
-		g.CloseGame()
+	if g.Boxers[playerID].Health <= 0 {
+		g.LoseGame(playerID)
 		return
 	}
-
 	// Set last hit timestamp
 	g.Boxers[playerID].LastHit = time.Now().Unix()
 	// Print hp
 	render.DrawHealth(g.RenderConverter(), playerID)
+}
+
+func (g *Game) BoxerHit(
+	part domain.BodyPart,
+	id domain.PlayerID,
+	direction domain.Direction,
+) {
+	var (
+		boxer = g.Boxers[id]
+		//baseSit     = boxer.Situation
+		copyBoxer     = Snapshot(boxer.BaseBoxer)
+		affectedParts map[domain.BodyPart][]domain.Direction
+	)
+
+	g.HitLogic(part, id)
+	switch part {
+	case domain.Head:
+		// Init effect
+		copyBoxer.Situation = domain.Situation{SituationType: domain.HeadInitHit}
+		affectedParts = map[domain.BodyPart][]domain.Direction{
+			domain.Head: {domain.Left}, domain.Shoulder: {direction, direction.Opposite()},
+		}
+		g.UpdateBoxer(id, copyBoxer, affectedParts)
+		// Main effect
+		copyBoxer.Situation.SituationType = domain.HeadHit
+		affectedParts = sprites.AllBodyParts
+		g.UpdateBoxer(id, copyBoxer, affectedParts)
+		// Reform Idle
+		//copyBoxer.Situation = baseSit
+		copyBoxer.Situation.SituationType = domain.Idle
+		g.UpdateBoxer(id, copyBoxer, affectedParts)
+	case domain.Shoulder:
+		// Init effect
+		copyBoxer.Situation = domain.Situation{SituationType: domain.ShoulderInitHit, Direction: direction}
+		affectedParts = map[domain.BodyPart][]domain.Direction{domain.Shoulder: {direction}}
+		g.UpdateBoxer(id, copyBoxer, affectedParts)
+		// Main effect
+		copyBoxer.Situation.SituationType = domain.ShoulderHit
+		affectedParts = map[domain.BodyPart][]domain.Direction{
+			domain.Head: {domain.Left}, domain.Arm: {direction}, domain.Shoulder: {direction},
+		}
+		g.UpdateBoxer(id, copyBoxer, affectedParts)
+		// Reform Idle
+		//copyBoxer.Situation = baseSit
+		copyBoxer.Situation.SituationType = domain.Idle
+		g.UpdateBoxer(id, copyBoxer, affectedParts)
+	case domain.Arm:
+	}
 }

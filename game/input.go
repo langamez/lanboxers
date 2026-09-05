@@ -5,7 +5,7 @@ import (
 )
 
 func (g *Game) HandleAction(
-	act domain.Act,
+	act domain.Action,
 	player domain.PlayerID,
 ) {
 	switch act {

@@ -1,8 +1,9 @@
 package game
 
 import (
-	"github.com/langamez/lanboxers/domain"
 	"sync"
+
+	"github.com/langamez/lanboxers/domain"
 )
 
 func NewBoxer(
@@ -18,9 +19,9 @@ func NewBoxer(
 			Color:     color,
 			Position:  position,
 			Direction: direction,
-			Situation: domain.Idle,
 			Area:      domain.Area{},
 			Health:    domain.MaxHealth,
+			Situation: domain.Situation{SituationType: domain.Idle},
 		},
 	}
 }
@@ -47,4 +48,32 @@ func NewBoxers(cage domain.Cage) domain.Boxers {
 			domain.Right,
 		),
 	}
+}
+
+func Snapshot(boxer domain.BaseBoxer) domain.BaseBoxer {
+	return domain.BaseBoxer{
+		Area:      boxer.Area,
+		Name:      boxer.Name,
+		Color:     boxer.Color,
+		Health:    boxer.Health,
+		LastHit:   boxer.LastHit,
+		Position:  boxer.Position,
+		Direction: boxer.Direction,
+		Situation: boxer.Situation,
+	}
+}
+
+func (g *Game) UpdateBoxer(
+	id domain.PlayerID,
+	toBoxer domain.BaseBoxer,
+	parts map[domain.BodyPart][]domain.Direction,
+) {
+	boxer := g.Boxers[id]
+	boxer.Lock.Lock()
+	defer boxer.Lock.Unlock()
+
+	g.Boxers[id].BaseBoxer.Position = toBoxer.Position
+	g.Boxers[id].BaseBoxer.Situation = toBoxer.Situation
+
+	g.RenderChans[id] <- domain.RenderCommand{Boxer: toBoxer, Parts: parts}
 }

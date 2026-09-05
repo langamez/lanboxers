@@ -2,13 +2,15 @@ package game
 
 import (
 	"context"
+
 	"github.com/langamez/lanboxers/domain"
 	"github.com/langamez/lanboxers/render"
 )
 
 type Game struct {
-	Cage   domain.Cage
-	Boxers domain.Boxers
+	Cage        domain.Cage
+	Boxers      domain.Boxers
+	RenderChans domain.RenderChannels
 
 	Context context.Context
 	Cancel  context.CancelFunc
@@ -19,11 +21,13 @@ func NewGame(width, height int) *Game {
 
 	cage := NewCage(width, height)
 	boxers := NewBoxers(cage)
+	renderChans := NewRenderChannels()
 	RecalculateCollisionAreas(boxers)
 
 	return &Game{
-		Cage:   cage,
-		Boxers: boxers,
+		Cage:        cage,
+		Boxers:      boxers,
+		RenderChans: renderChans,
 
 		Context: ctx,
 		Cancel:  cancel,
@@ -33,6 +37,11 @@ func NewGame(width, height int) *Game {
 func (g *Game) CloseGame() {
 	render.ClearScreen()
 	g.Cancel()
+}
+
+func (g *Game) LoseGame(playerID domain.PlayerID) {
+	render.LoseEffect(g.Boxers[playerID].Color, g.Cage.Area.Max)
+	g.CloseGame()
 }
 
 func (g *Game) RenderConverter() domain.RenderInfo {

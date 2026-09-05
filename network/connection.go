@@ -4,11 +4,12 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"github.com/langamez/lanboxers/domain"
-	"github.com/langamez/lanboxers/render"
 	"net"
 	"strconv"
 	"sync"
+
+	"github.com/langamez/lanboxers/domain"
+	"github.com/langamez/lanboxers/render"
 )
 
 type Connection struct {
@@ -42,7 +43,7 @@ func (c *Connection) send(data string) error {
 	return err
 }
 
-func (c *Connection) SendAct(act domain.Act) error {
+func (c *Connection) SendAct(act domain.Action) error {
 	var actStr = strconv.Itoa(int(act))
 	if err := c.send(actStr); err != nil {
 		return err
@@ -67,7 +68,7 @@ func (c *Connection) receive() (string, error) {
 	return string(buffer), nil
 }
 
-func (c *Connection) Listen(eventChan chan<- domain.Act) {
+func (c *Connection) Listen(eventChan chan<- domain.Action) {
 	for {
 		msg, err := c.receive()
 		if err != nil {
@@ -81,6 +82,6 @@ func (c *Connection) Listen(eventChan chan<- domain.Act) {
 		if err != nil {
 		}
 
-		eventChan <- domain.Act(msgInt)
+		eventChan <- domain.Action(msgInt)
 	}
 }

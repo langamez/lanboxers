@@ -7,7 +7,7 @@ import (
 func GetBodyChar(
 	part domain.BodyPart,
 	partDir domain.Direction,
-	situation domain.Situation,
+	situation domain.SituationType,
 	boxerDir domain.Direction,
 ) string {
 	return BodyChars[situation][part][boxerDir][partDir]
@@ -16,7 +16,7 @@ func GetBodyChar(
 func GetPosition(
 	part domain.BodyPart,
 	partDir domain.Direction,
-	situation domain.Situation,
+	situation domain.SituationType,
 ) domain.Position {
 	return SpriteLayouts[situation].Parts[part][partDir]
 }

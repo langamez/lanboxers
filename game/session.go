@@ -4,6 +4,7 @@ import (
 	"github.com/langamez/lanboxers/domain"
 	"github.com/langamez/lanboxers/internal/terminal"
 	"github.com/langamez/lanboxers/network"
+	"github.com/langamez/lanboxers/render"
 )
 
 type Session struct {
@@ -19,11 +20,6 @@ func NewSession(g *Game) (*Session, error) {
 		return nil, err
 	}
 
-	//if !isHost {
-	//	g.Boxers[domain.PlayerMain].Direction = g.Boxers[domain.PlayerMain].Direction.Opposite()
-	//	g.Boxers[domain.PlayerOpponent].Direction = g.Boxers[domain.PlayerOpponent].Direction.Opposite()
-	//}
-
 	return &Session{
 		Game: g,
 		Conn: conn,
@@ -33,8 +29,8 @@ func NewSession(g *Game) (*Session, error) {
 
 func (s *Session) Start() {
 	var player domain.PlayerID
-	localChan := make(chan domain.Act)
-	remoteChan := make(chan domain.Act)
+	localChan := make(chan domain.Action)
+	remoteChan := make(chan domain.Action)
 
 	if s.Host {
 		player = domain.PlayerMain
@@ -46,11 +42,14 @@ func (s *Session) Start() {
 
 	go s.Conn.Listen(remoteChan)
 	go s.handleRemoteInput(player.Opposite(), remoteChan)
+
+	go render.BoxerRenderer(s.Game.RenderChans[domain.PlayerMain], s.Game.Boxers[domain.PlayerMain].BaseBoxer)
+	go render.BoxerRenderer(s.Game.RenderChans[domain.PlayerOpponent], s.Game.Boxers[domain.PlayerOpponent].BaseBoxer)
 }
 
 func (s *Session) handleLocalInput(
 	player domain.PlayerID,
-	actions <-chan domain.Act,
+	actions <-chan domain.Action,
 ) {
 	for act := range actions {
 		if err := s.Conn.SendAct(act); err != nil {
@@ -63,7 +62,7 @@ func (s *Session) handleLocalInput(
 
 func (s *Session) handleRemoteInput(
 	player domain.PlayerID,
-	actions <-chan domain.Act,
+	actions <-chan domain.Action,
 ) {
 	for act := range actions {
 		s.Game.HandleAction(act, player)

@@ -3,9 +3,10 @@ package terminal
 import (
 	"bufio"
 	"fmt"
-	"github.com/langamez/lanboxers/domain"
 	"os"
 	"strings"
+
+	"github.com/langamez/lanboxers/domain"
 )
 
 func GetConnectionInfo() (isHost bool, ip string) {
@@ -41,7 +42,7 @@ func GetConnectionInfo() (isHost bool, ip string) {
 	}
 }
 
-func ReadActions(actions chan<- domain.Act) {
+func ReadActions(actions chan<- domain.Action) {
 	buf := make([]byte, 3)
 
 	for {
@@ -59,7 +60,7 @@ func ReadActions(actions chan<- domain.Act) {
 	}
 }
 
-func actionFromKey(key string) (domain.Act, bool) {
+func actionFromKey(key string) (domain.Action, bool) {
 	switch key {
 	case "\033[A":
 		return -domain.DoMoveDown, true

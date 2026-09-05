@@ -1,9 +1,9 @@
 package domain
 
-type Act int
+type Action int
 
 const (
-	DoMoveLeft Act = iota + 1
+	DoMoveLeft Action = iota + 1
 	DoMoveDown
 	DoPunch
 	Quit

@@ -15,15 +15,14 @@ type Boxer struct {
 }
 
 type BaseBoxer struct {
-	Name         string
-	Health       int
-	LastHit      int64
-	Color        string
-	Position     Position
-	Direction    Direction
-	Situation    Situation
-	SituationDir Direction
-	Area         Area
+	Name      string
+	Health    int
+	LastHit   int64
+	Color     string
+	Position  Position
+	Direction Direction
+	Situation Situation
+	Area      Area
 }
 
 type PunchDetail struct {

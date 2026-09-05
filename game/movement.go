@@ -2,7 +2,6 @@ package game
 
 import (
 	"github.com/langamez/lanboxers/domain"
-	"github.com/langamez/lanboxers/render"
 	"github.com/langamez/lanboxers/sprites"
 )
 
@@ -31,8 +30,8 @@ func (g *Game) BoxerMove(playerID domain.PlayerID, direction domain.Direction) {
 	boxer := g.Boxers[playerID]
 	opponent := g.Boxers[playerID.Opposite()]
 
-	boxerCopy := render.Snapshot(boxer.BaseBoxer)
-	opponentCopy := render.Snapshot(opponent.BaseBoxer)
+	boxerCopy := Snapshot(boxer.BaseBoxer)
+	opponentCopy := Snapshot(opponent.BaseBoxer)
 
 	switch direction {
 	case domain.Upper:
@@ -55,9 +54,9 @@ func (g *Game) BoxerMove(playerID domain.PlayerID, direction domain.Direction) {
 		return
 	} else if override {
 		g.resolvePass(&boxerCopy, &opponentCopy)
-		render.BoxerFrame(opponent, opponentCopy, sprites.AllBodyParts)
+		g.UpdateBoxer(playerID.Opposite(), opponentCopy, sprites.AllBodyParts)
 	}
-	render.BoxerFrame(boxer, boxerCopy, sprites.AllBodyParts)
+	g.UpdateBoxer(playerID, boxerCopy, sprites.AllBodyParts)
 
 	// todo: make this cleaner
 	if override {

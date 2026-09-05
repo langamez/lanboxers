@@ -2,7 +2,7 @@ package sprites
 
 import "github.com/langamez/lanboxers/domain"
 
-var BodyChars = map[domain.Situation]map[domain.BodyPart]map[domain.Direction]map[domain.Direction]string{
+var BodyChars = map[domain.SituationType]map[domain.BodyPart]map[domain.Direction]map[domain.Direction]string{
 	domain.Idle: {
 		domain.Head: {
 			domain.Left:  {domain.Left: "(:/)"},

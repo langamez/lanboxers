@@ -8,7 +8,7 @@ type SpritePosition struct {
 	Parts map[domain.BodyPart]map[domain.Direction]domain.Position
 }
 
-var SpriteLayouts = map[domain.Situation]SpritePosition{
+var SpriteLayouts = map[domain.SituationType]SpritePosition{
 	domain.Idle: {
 		Parts: map[domain.BodyPart]map[domain.Direction]domain.Position{
 			domain.Head:     {domain.Left: {X: 0, Y: 0}},

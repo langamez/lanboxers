@@ -1,8 +1,9 @@
 package render
 
 import (
-	"github.com/langamez/lanboxers/domain"
 	"strings"
+
+	"github.com/langamez/lanboxers/domain"
 )
 
 func drawHud(renderInfo domain.RenderInfo) {
@@ -26,6 +27,7 @@ func DrawHealth(hudInfo domain.RenderInfo, playerID domain.PlayerID) {
 	indent := hpLength - (2 * domain.WallLength)
 	//Convert to character
 	filled := hudInfo.Boxers[playerID].Health * hpLength / 100
+
 	hpChar = strings.Repeat("█", filled) +
 		strings.Repeat("░", hpLength-filled)
 	//Calculate horizontal health bar position

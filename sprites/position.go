@@ -2,6 +2,7 @@ package sprites
 
 import (
 	"unicode/utf8"
+
 	"github.com/langamez/lanboxers/domain"
 )
 

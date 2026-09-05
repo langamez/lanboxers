@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+
 	"github.com/langamez/lanboxers/domain"
 	"github.com/langamez/lanboxers/sprites"
 )
@@ -42,9 +43,9 @@ func DrawGame(renderInfo domain.RenderInfo) {
 	// Render players health bar
 	drawHud(renderInfo)
 	//Spawn player 1
-	DrawBoxer(Snapshot(renderInfo.Boxers[domain.PlayerMain].BaseBoxer), sprites.AllBodyParts, renderInfo.Boxers[domain.PlayerMain].Color)
+	DrawBoxer(renderInfo.Boxers[domain.PlayerMain].BaseBoxer, sprites.AllBodyParts, renderInfo.Boxers[domain.PlayerMain].Color)
 	//Spawn player 2
-	DrawBoxer(Snapshot(renderInfo.Boxers[domain.PlayerOpponent].BaseBoxer), sprites.AllBodyParts, renderInfo.Boxers[domain.PlayerOpponent].Color)
+	DrawBoxer(renderInfo.Boxers[domain.PlayerOpponent].BaseBoxer, sprites.AllBodyParts, renderInfo.Boxers[domain.PlayerOpponent].Color)
 	// Move cursor below term
 	fmt.Printf("\033[%d;1H", renderInfo.Cage.Area.Max.Y+10)
 }
