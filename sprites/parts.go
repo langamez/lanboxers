@@ -1,6 +1,6 @@
 package sprites
 
-import "lanBox/domain"
+import "github.com/langamez/lanboxers/domain"
 
 var AllBodyParts = map[domain.BodyPart][]domain.Direction{
 	domain.Head:     {domain.Left},

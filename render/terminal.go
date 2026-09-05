@@ -2,8 +2,8 @@ package render
 
 import (
 	"fmt"
-	"lanBox/domain"
-	"lanBox/sprites"
+	"github.com/langamez/lanboxers/domain"
+	"github.com/langamez/lanboxers/sprites"
 	"strings"
 	"time"
 	"unicode/utf8"

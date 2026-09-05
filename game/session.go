@@ -1,9 +1,9 @@
 package game
 
 import (
-	"lanBox/domain"
-	"lanBox/internal/terminal"
-	"lanBox/network"
+	"github.com/langamez/lanboxers/domain"
+	"github.com/langamez/lanboxers/internal/terminal"
+	"github.com/langamez/lanboxers/network"
 )
 
 type Session struct {

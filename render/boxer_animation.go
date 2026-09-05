@@ -1,7 +1,7 @@
 package render
 
 import (
-	"lanBox/domain"
+	"github.com/langamez/lanboxers/domain"
 )
 
 func PlayPunch(punch domain.PunchDetail) {

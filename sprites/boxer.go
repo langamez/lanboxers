@@ -1,6 +1,6 @@
 package sprites
 
-import "lanBox/domain"
+import "github.com/langamez/lanboxers/domain"
 
 var BodyChars = map[domain.Situation]map[domain.BodyPart]map[domain.Direction]map[domain.Direction]string{
 	domain.Idle: {

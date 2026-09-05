@@ -3,9 +3,9 @@ package main
 
 import (
 	"fmt"
-	"lanBox/game"
-	"lanBox/internal/terminal"
-	"lanBox/render"
+	"github.com/langamez/lanboxers/game"
+	"github.com/langamez/lanboxers/internal/terminal"
+	"github.com/langamez/lanboxers/render"
 )
 
 func main() {

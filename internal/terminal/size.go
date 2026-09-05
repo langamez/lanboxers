@@ -1,7 +1,7 @@
 package terminal
 
 import (
-	"lanBox/config"
+	"github.com/langamez/lanboxers/config"
 	"os"
 
 	"golang.org/x/term"

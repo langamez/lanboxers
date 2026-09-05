@@ -3,7 +3,7 @@ package terminal
 import (
 	"bufio"
 	"fmt"
-	"lanBox/domain"
+	"github.com/langamez/lanboxers/domain"
 	"os"
 	"strings"
 )

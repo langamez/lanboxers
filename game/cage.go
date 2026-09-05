@@ -1,7 +1,7 @@
 package game
 
 import (
-	"lanBox/domain"
+	"github.com/langamez/lanboxers/domain"
 )
 
 func NewCage(width, height int) domain.Cage {

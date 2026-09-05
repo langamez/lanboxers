@@ -2,8 +2,8 @@ package game
 
 import (
 	"context"
-	"lanBox/domain"
-	"lanBox/render"
+	"github.com/langamez/lanboxers/domain"
+	"github.com/langamez/lanboxers/render"
 )
 
 type Game struct {

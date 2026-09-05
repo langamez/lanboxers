@@ -2,7 +2,7 @@ package network
 
 import (
 	"fmt"
-	"lanBox/render"
+	"github.com/langamez/lanboxers/render"
 	"net"
 )
 

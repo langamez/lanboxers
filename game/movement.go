@@ -1,9 +1,9 @@
 package game
 
 import (
-	"lanBox/domain"
-	"lanBox/render"
-	"lanBox/sprites"
+	"github.com/langamez/lanboxers/domain"
+	"github.com/langamez/lanboxers/render"
+	"github.com/langamez/lanboxers/sprites"
 )
 
 func (g *Game) resolvePass(

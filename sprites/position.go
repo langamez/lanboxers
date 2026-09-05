@@ -1,8 +1,8 @@
 package sprites
 
 import (
-	"lanBox/domain"
 	"unicode/utf8"
+	"github.com/langamez/lanboxers/domain"
 )
 
 func CalculatePartPosition(

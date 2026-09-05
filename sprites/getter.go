@@ -1,7 +1,7 @@
 package sprites
 
 import (
-	"lanBox/domain"
+	"github.com/langamez/lanboxers/domain"
 )
 
 func GetBodyChar(
