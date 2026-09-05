@@ -2,8 +2,9 @@ package network
 
 import (
 	"fmt"
-	"github.com/langamez/lanboxers/render"
 	"net"
+
+	"github.com/langamez/lanboxers/render"
 )
 
 func StartServer(port int) (*Connection, error) {
