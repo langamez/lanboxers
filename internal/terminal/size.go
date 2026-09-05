@@ -1,23 +1,20 @@
 package terminal
 
 import (
-	"github.com/langamez/lanboxers/config"
 	"os"
 
 	"golang.org/x/term"
 )
 
 const (
-	defaultWidth  = 80
-	defaultHeight = 30
+	defaultWidth  int = 80
+	defaultHeight int = 30
 )
 
 func Size() (int, int) {
 	width, height, err := term.GetSize(int(os.Stdout.Fd()))
-	if err == nil {
-		return width, height
+	if err != nil {
+		return defaultWidth, defaultHeight
 	}
-
-	return config.Int("LANBOX_WIDTH", defaultWidth),
-		config.Int("LANBOX_HEIGHT", defaultHeight)
+	return width, height
 }

@@ -17,12 +17,11 @@ func main() {
 		return
 	}
 
-	terminalSession, err := terminal.Start(g.Cancel)
-	if err != nil {
+	if err := terminal.RawMode(); err != nil {
 		fmt.Println(err)
 		return
 	}
-	defer terminalSession.Close()
+	defer terminal.NormalMode()
 
 	render.DrawGame(g.RenderConverter())
 

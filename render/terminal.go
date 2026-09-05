@@ -19,8 +19,6 @@ func PrintOn(position domain.Position, color, char string) {
 func Frame(n float64) {
 	n += 3
 	n = n * 10
-	// Move cursor to end
-	fmt.Printf("\033[%d;1H", 10)
 	time.Sleep(time.Duration(n) * time.Millisecond)
 }
 
