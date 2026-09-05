@@ -57,41 +57,38 @@ func CheckHit(
 	defender *domain.Boxer,
 ) (bool, domain.BodyPart, domain.Direction) {
 	var (
-		charLen   int
-		part      domain.BodyPart
-		dir       domain.Direction
-		shCharLen = utf8.RuneCountInString(
-			sprites.BodyChars[domain.Punch][domain.Shoulder][punch.Attacker.Direction][punch.Direction])
+		charLen int
+		part    domain.BodyPart
+		dir     domain.Direction
 	)
 
 	// calculate punch position
-	//hitPoint := sprites.SpriteLayouts[domain.Punch].Parts[domain.Shoulder][punch.Direction]
-	hitPoint := sprites.GetPosition(domain.Shoulder, punch.Direction, domain.Punch)
-	hitPoint = sprites.CalculatePartPosition(shCharLen, punch.Attacker.BaseBoxer, hitPoint)
-	if punch.Attacker.Direction == domain.Left {
-		hitPoint.X += shCharLen
-	}
+	hitPoint := sprites.CalculateHitPoint(punch)
+	//render.PrintOn(domain.Position{10, 10}, punch.Attacker.Color, fmt.Sprintf("hitpoint = %d:%d", hitPoint.X, hitPoint.Y))
+	//render.PrintOn(domain.Position{punch.Attacker.Position.X + 5, punch.Attacker.Position.Y}, punch.Attacker.Color, fmt.Sprintf("boxer position = %d:%d", punch.Attacker.Position.X, punch.Attacker.Position.Y))
+	//char := fmt.Sprintf("suboxer position = %d:%d", defender.Position.X, defender.Position.Y)
+	//render.PrintOn(domain.Position{defender.Position.X - utf8.RuneCountInString(char) - 5, defender.Position.Y}, defender.Color, fmt.Sprintf("suboxer position = %d:%d", defender.Position.X, defender.Position.Y))
 
 	// Compare with defender body parts
 	for part = range sprites.SpriteLayouts[domain.Idle].Parts {
 		for dir = range sprites.SpriteLayouts[domain.Idle].Parts[part] {
-			charLen = utf8.RuneCountInString(sprites.BodyChars[defender.Situation][part][defender.Direction][dir])
+			charLen = utf8.RuneCountInString(sprites.GetBodyChar(part, dir, defender.Situation, defender.Direction))
 			if part != domain.Head &&
-				defender.Direction == domain.Right {
+				punch.Attacker.Direction == domain.Right {
+				//render.PrintOn(domain.Position{10, 13}, defender.Color, fmt.Sprintf("changed from %d dir to: %d", dir, dir.Opposite()))
 				dir = dir.Opposite()
 			}
 			partPos := sprites.GetPosition(part, dir, domain.Idle)
-			switch part {
-			case domain.Arm:
-				partPos.X -= 1
-			case domain.Shoulder:
-				partPos.X += 2
-			}
-			charLen = utf8.RuneCountInString(sprites.GetBodyChar(part, dir, defender.Situation, defender.Direction))
 			partPos = sprites.CalculatePartPosition(charLen, defender.BaseBoxer, partPos)
-			if defender.Direction == domain.Left { // == Left
-				partPos.X += charLen
+
+			if part == domain.Shoulder &&
+				dir == domain.Right {
+				//render.PrintOn(domain.Position{10, 14}, defender.Color, fmt.Sprintf("partpose = %d:%d", partPos.X, partPos.Y))
 			}
+
+			//if defender.Direction == domain.Left { // == Left
+			//	partPos.X += charLen
+			//}
 
 			// todo add arm hit
 			//if part == Arm {
@@ -100,10 +97,11 @@ func CheckHit(
 			//}
 
 			if hitPoint == partPos {
-				if part != domain.Head &&
-					defender.Direction == domain.Right {
-					dir = dir.Opposite()
-				}
+				//if part != domain.Head &&
+				//	defender.Direction == domain.Right {
+				//	dir = dir.Opposite()
+				//}
+				//render.PrintOn(domain.Position{10, 14}, defender.Color, fmt.Sprintf("direction = %d", dir))
 				return true, part, dir
 			}
 		}
@@ -128,7 +126,7 @@ func (g *Game) TakeDamage(
 	if g.Boxers[playerID].Health == 0 {
 		// todo: move these to render
 		// ex: render.LoseGame()
-		render.PrintOn(domain.Position{X: 20, Y: 24}, g.Boxers[playerID].Color, "Loser")
+		//render.PrintOn(domain.Position{X: 20, Y: 24}, g.Boxers[playerID].Color, "Loser")
 		render.Frame(100)
 		g.CloseGame()
 		return

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"lanBox/render"
 	"os"
 	"os/signal"
 	"sync"
@@ -15,45 +16,15 @@ func clearScreen() {
 	fmt.Print("\033[2J")
 }
 
-func spawnCage(cage Cage) {
-	var (
-		verticalWall   = "▌"
-		horizontalWall = "─"
-
-		reset = "\033[0m"
-	)
-
-	// Clear the screen
-	clearScreen()
-
-	// Spawn horizontal wall
-	// todo get from env
-	for y := cage.Area[Min].Y - WallLength; y <= WallLength; y++ {
-		for x := cage.Area[Min].X - WallLength; x <= cage.Area[Max].X; x++ {
-			fmt.Printf("\033[%d;%dH%s%s%s", y, x, cage.Color, horizontalWall, reset)
-			fmt.Printf("\033[%d;%dH%s%s%s", cage.Area[Max].Y-(y-1), x, cage.Color, horizontalWall, reset)
-		}
-	}
-	// Spawn vertical wall
-	for y := cage.Area[Min].Y - WallLength; y <= cage.Area[Max].Y; y++ {
-		for x := cage.Area[Min].X - WallLength; x <= WallLength; x++ {
-			fmt.Printf("\033[%d;%dH%s%s%s", y, x, cage.Color, verticalWall, reset)
-			fmt.Printf("\033[%d;%dH%s%s%s", y, cage.Area[Max].X-(x-1), cage.Color, verticalWall, reset)
-		}
-	}
-	//Move cursor below term
-	//fmt.Printf("\033[%d;1H", cage.Area[Max].Y+10)
-}
-
 func spawnGame(gameInfo GameInfo) {
 	//Spawn cage
 	spawnCage(gameInfo.Cage)
 	//Spawn players health bar
 	gameInfo.PrintHud()
 	//Spawn player 1
-	PrintBoxer(gameInfo.Boxers[Main].Snapshot(), AllBodyParts, gameInfo.Boxers[Main].Color)
+	PrintBoxer(gameInfo.Boxers[Main].Snapshot(), render.AllBodyParts(), gameInfo.Boxers[Main].Color)
 	//Spawn player 2
-	PrintBoxer(gameInfo.Boxers[Opponent].Snapshot(), AllBodyParts, gameInfo.Boxers[Opponent].Color)
+	PrintBoxer(gameInfo.Boxers[Opponent].Snapshot(), render.AllBodyParts(), gameInfo.Boxers[Opponent].Color)
 	// Move cursor below term
 	fmt.Printf("\033[%d;1H", gameInfo.Cage.Area[Max].Y+10)
 }
