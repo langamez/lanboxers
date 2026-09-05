@@ -1,4 +1,3 @@
-// package lanbox
 package main
 
 import (
