@@ -74,6 +74,7 @@ func (g *Game) UpdateBoxer(
 
 	g.Boxers[id].BaseBoxer.Position = toBoxer.Position
 	g.Boxers[id].BaseBoxer.Situation = toBoxer.Situation
+	g.Boxers[id].BaseBoxer.Direction = toBoxer.Direction
 
 	g.RenderChans[id] <- domain.RenderCommand{Boxer: toBoxer, Parts: parts}
 }

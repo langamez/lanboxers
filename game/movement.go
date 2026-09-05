@@ -17,11 +17,6 @@ func (g *Game) resolvePass(
 		boxerCopy.Position.X -= domain.IdleBoxerForwardLength + 5
 		opponentCopy.Position.X += domain.IdleBoxerForwardLength + 5
 	}
-
-	//render.PrintOn(domain.Position{X: 10, Y: 10}, boxerCopy.Color, fmt.Sprintf("%d", boxerCopy.Position.X))
-	//render.PrintOn(domain.Position{X: 10, Y: 11}, opponentCopy.Color, fmt.Sprintf("%d", opponentCopy.Position.X))
-	//render.Frame(20)
-
 	boxerCopy.Direction = boxerCopy.Direction.Opposite()
 	opponentCopy.Direction = opponentCopy.Direction.Opposite()
 }
